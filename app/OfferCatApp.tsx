@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useState } from "react";
 
 type Job = {
   id: string;
@@ -143,6 +143,9 @@ export default function OfferCatApp() {
   const [city, setCity] = useState("全部");
   const [batch, setBatch] = useState("全部");
   const [tag, setTag] = useState("全部");
+  const [dogPosition, setDogPosition] = useState({ x: 72, y: 72 });
+  const [offerCount, setOfferCount] = useState(0);
+  const [isDogHappy, setIsDogHappy] = useState(false);
 
   const cityOptions = useMemo(
     () => ["全部", ...Array.from(new Set(jobs.flatMap((job) => job.city.split(/[、,，/]/)).map((item) => item.trim()).filter(Boolean)))],
@@ -166,6 +169,23 @@ export default function OfferCatApp() {
       (tag === "全部" || job.tags.includes(tag))
     );
   });
+
+  useEffect(() => {
+    const route = [
+      { x: 72, y: 72 },
+      { x: 18, y: 66 },
+      { x: 42, y: 78 },
+      { x: 78, y: 58 },
+      { x: 10, y: 74 },
+    ];
+    let index = 0;
+    const timer = window.setInterval(() => {
+      index = (index + 1) % route.length;
+      setDogPosition(route[index]);
+    }, 3600);
+
+    return () => window.clearInterval(timer);
+  }, []);
 
   function updateJobStatus(jobId: string, status: Job["status"]) {
     setJobs((current) => current.map((job) => (job.id === jobId ? { ...job, status } : job)));
@@ -204,14 +224,20 @@ export default function OfferCatApp() {
     }
   }
 
+  function petOfferDog() {
+    setOfferCount((current) => current + 1);
+    setIsDogHappy(true);
+    window.setTimeout(() => setIsDogHappy(false), 850);
+  }
+
   return (
     <main className="site-shell">
       <header className="site-header">
         <div className="brand">
           <img src="/assets/offercat-mark.svg" alt="" />
           <div>
-            <strong>offercat</strong>
-            <span>秋招信息与投递进程工作台</span>
+            <strong>OfferCat</strong>
+            <span>offer tracker</span>
           </div>
         </div>
         <nav aria-label="主导航">
@@ -236,102 +262,192 @@ export default function OfferCatApp() {
       </header>
 
       <section className="hero">
-        <div>
-          <span className="eyebrow">offercat intelligence</span>
-          <h1>把分散的校招信息，变成你的可投递岗位库</h1>
-          <p>从公司官网、腾讯文档和 ATS 平台同步岗位线索，统一筛选、去重、进入投递流程。</p>
+        <div className="hero-copy">
+          <span className="eyebrow">OfferCat Intelligence</span>
+          <h1>把秋招情报，整理成会长 offer 的桌面。</h1>
+          <p>官网巡检、岗位筛选、投递状态和面试提醒都收进一个柔软的工作台，像贴在桌面上的小窗口一样随手翻。</p>
+          <div className="hero-actions">
+            <button onClick={() => setActiveView("职位信息")} type="button">
+              <span aria-hidden="true">+</span>
+              看岗位库
+            </button>
+            <button onClick={() => setActiveView("我的秋招")} type="button">
+              <span aria-hidden="true">✓</span>
+              看进度
+            </button>
+          </div>
         </div>
-        <div className="metrics" aria-label="岗位概览">
-          <Metric label="可投递岗位" value={jobs.length} />
-          <Metric label="当前筛选结果" value={filteredJobs.length} />
-          <Metric label="已进入流程" value={jobs.filter((job) => job.status === "已投递" || job.status === "面试中").length} />
+        <div className="hero-stage" aria-label="OfferCat 主视觉">
+          <img className="hero-reference" src="/assets/showcase/mad-reference.png" alt="粉橙色浮层卡片风格参考主视觉" />
+          <div className="floating-window floating-window--logo">
+            <span>O</span>
+            <strong>C</strong>
+          </div>
+          <div className="floating-window floating-window--pitch">
+            <small>OfferCat.app</small>
+            <h2>Jobs, notes and deadlines in one soft workspace.</h2>
+            <p>校招情报自动归档，投递动作每天轻一点。</p>
+            <button aria-label="打开岗位概览" onClick={() => setActiveView("职位信息")} type="button">↗</button>
+          </div>
+          <div className="floating-window floating-window--reminders">
+            <small>Today</small>
+            <h3>Commandments <span>{jobs.length}</span></h3>
+            {["投递前先确认官网", "收藏高匹配岗位", "记录 deadline", "面试后写复盘"].map((item) => (
+              <p key={item}><i aria-hidden="true" />{item}</p>
+            ))}
+            <button aria-label="新增提醒" type="button">+</button>
+          </div>
+          <div className="bubble-nav bubble-nav--about">Jobs</div>
+          <div className="bubble-nav bubble-nav--team">Sources</div>
+          <div className="bubble-nav bubble-nav--work">Pipeline</div>
+          <div className="bubble-nav bubble-nav--contact">Calendar</div>
+          <div className="social-dock" aria-label="快捷入口">
+            <button aria-label="灵感入口" type="button">◎</button>
+            <button aria-label="动态入口" type="button">◆</button>
+          </div>
         </div>
       </section>
 
-      {activeView === "职位信息" && (
-        <>
-          <section className="filters" aria-label="职位筛选">
-            <label>
-              搜索
-              <input
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="公司、岗位、城市、技能"
-                value={query}
-              />
-            </label>
-            <label>
-              工作地点
-              <select onChange={(event) => setCity(event.target.value)} value={city}>
-                {cityOptions.map((option) => (
-                  <option key={option}>{option}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              批次
-              <select onChange={(event) => setBatch(event.target.value)} value={batch}>
-                <option>全部</option>
-                <option>校招</option>
-                <option>实习</option>
-              </select>
-            </label>
-            <label>
-              岗位方向
-              <select onChange={(event) => setTag(event.target.value)} value={tag}>
-                {tagOptions.map((option) => (
-                  <option key={option}>{option}</option>
-                ))}
-              </select>
-            </label>
-            <button onClick={() => { setQuery(""); setCity("全部"); setBatch("全部"); setTag("全部"); }} type="button">
-              清空筛选
-            </button>
-          </section>
-          <JobsTable jobs={filteredJobs} onStatusChange={updateJobStatus} />
-        </>
-      )}
+      <section className="metrics" aria-label="岗位概览">
+        <Metric label="可投递岗位" value={jobs.length} />
+        <Metric label="当前筛选结果" value={filteredJobs.length} />
+        <Metric label="已进入流程" value={jobs.filter((job) => job.status === "已投递" || job.status === "面试中").length} />
+        <Metric label="摸狗获得 offer" value={offerCount} />
+      </section>
 
-      {activeView === "数据源" && (
-        <section className="source-grid">
-          {sources.map((source) => (
-            <article className="source-card" key={source.id}>
-              <span>{source.category}</span>
-              <h2>{source.name}</h2>
-              <strong>{source.status}</strong>
-              <p>{source.detail}</p>
+      <section className="spotlight-grid" aria-label="今日重点">
+        <article className="note-window">
+          <span>All about offers</span>
+          <h2>今日优先级</h2>
+          {[
+            ["百度", "确认 2027 届校招入口"],
+            ["字节跳动", "补充岗位方向标签"],
+            ["RoboSense", "记录 7.15 截止线索"],
+          ].map(([company, detail]) => (
+            <p key={company}><strong>{company}</strong>{detail}</p>
+          ))}
+        </article>
+        <article className="mini-browser">
+          <span>Offer_Note.html</span>
+          <h2>投递小抄</h2>
+          <p>先看岗位信号，再按城市、方向和截止时间筛一轮，把感兴趣的机会扔进流程。</p>
+          <button onClick={() => setActiveView("数据源")} type="button">All Sources</button>
+        </article>
+        <article className="case-window">
+          <span>Interactive case</span>
+          <h2>摸摸狗头，offer +1</h2>
+          <p>页面里的狗狗会自己巡逻。点它一下，头顶会冒出新的 offer 计数。</p>
+        </article>
+      </section>
+
+      <section className="workspace-panel">
+        <div className="section-bar">
+          <div>
+            <span>Workspace</span>
+            <h2>{activeView}</h2>
+          </div>
+          <strong>{filteredJobs.length} jobs visible</strong>
+        </div>
+
+        {activeView === "职位信息" && (
+          <>
+            <section className="filters" aria-label="职位筛选">
+              <label>
+                搜索
+                <input
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="公司、岗位、城市、技能"
+                  value={query}
+                />
+              </label>
+              <label>
+                工作地点
+                <select onChange={(event) => setCity(event.target.value)} value={city}>
+                  {cityOptions.map((option) => (
+                    <option key={option}>{option}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                批次
+                <select onChange={(event) => setBatch(event.target.value)} value={batch}>
+                  <option>全部</option>
+                  <option>校招</option>
+                  <option>实习</option>
+                </select>
+              </label>
+              <label>
+                岗位方向
+                <select onChange={(event) => setTag(event.target.value)} value={tag}>
+                  {tagOptions.map((option) => (
+                    <option key={option}>{option}</option>
+                  ))}
+                </select>
+              </label>
+              <button onClick={() => { setQuery(""); setCity("全部"); setBatch("全部"); setTag("全部"); }} type="button">
+                清空筛选
+              </button>
+            </section>
+            <JobsTable jobs={filteredJobs} onStatusChange={updateJobStatus} />
+          </>
+        )}
+
+        {activeView === "数据源" && (
+          <section className="source-grid">
+            {sources.map((source) => (
+              <article className="source-card" key={source.id}>
+                <span>{source.category}</span>
+                <h2>{source.name}</h2>
+                <strong>{source.status}</strong>
+                <p>{source.detail}</p>
+              </article>
+            ))}
+            <article className="source-card action-card">
+              <span>导入</span>
+              <h2>导入官网巡检结果</h2>
+              <p>把脚本生成的官网校招信号加入当前职位库，之后可升级成定时自动同步。</p>
+              <button onClick={importOfficialSignals} type="button">导入官网巡检结果</button>
             </article>
-          ))}
-          <article className="source-card action-card">
-            <span>导入</span>
-            <h2>导入官网巡检结果</h2>
-            <p>把脚本生成的官网校招信号加入当前职位库，之后可升级成定时自动同步。</p>
-            <button onClick={importOfficialSignals} type="button">导入官网巡检结果</button>
-          </article>
-        </section>
-      )}
+          </section>
+        )}
 
-      {activeView === "我的秋招" && (
-        <section className="kanban">
-          {["收藏中", "待投递", "已投递", "面试中"].map((status) => (
-            <div key={status}>
-              <h2>{status}</h2>
-              {jobs.filter((job) => job.status === status).map((job) => (
-                <article key={job.id}>
-                  <strong>{job.company}</strong>
-                  <span>{job.title}</span>
-                </article>
-              ))}
-            </div>
-          ))}
-        </section>
-      )}
+        {activeView === "我的秋招" && (
+          <section className="kanban">
+            {["收藏中", "待投递", "已投递", "面试中"].map((status) => (
+              <div key={status}>
+                <h2>{status}</h2>
+                {jobs.filter((job) => job.status === status).map((job) => (
+                  <article key={job.id}>
+                    <strong>{job.company}</strong>
+                    <span>{job.title}</span>
+                  </article>
+                ))}
+              </div>
+            ))}
+          </section>
+        )}
 
-      {activeView === "面试日历" && (
-        <section className="empty-panel">
-          <h2>面试日历</h2>
-          <p>下一步会把投递流程里的笔试、面试、复盘和提醒统一放到这里。</p>
-        </section>
-      )}
+        {activeView === "面试日历" && (
+          <section className="empty-panel">
+            <h2>面试日历</h2>
+            <p>下一步会把投递流程里的笔试、面试、复盘和提醒统一放到这里。</p>
+          </section>
+        )}
+      </section>
+
+      <button
+        aria-label="摸摸狗头，增加 offer 计数"
+        className={`dog-buddy ${isDogHappy ? "dog-buddy--happy" : ""}`}
+        onPointerDown={petOfferDog}
+        style={{
+          "--dog-x": `${dogPosition.x}vw`,
+          "--dog-y": `${dogPosition.y}vh`,
+        } as CSSProperties}
+        type="button"
+      >
+        <span className="offer-pop" key={offerCount}>{offerCount > 0 ? `offer +${offerCount}` : "offer +1"}</span>
+        <video aria-hidden="true" autoPlay loop muted playsInline src="/assets/showcase/offer-dog.mp4" />
+      </button>
     </main>
   );
 }
