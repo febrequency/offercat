@@ -1,0 +1,403 @@
+{
+  "generatedAt": "2026-07-20T11:20:20.563Z",
+  "jobs": [
+    {
+      "company": "腾讯",
+      "title": "校招官网巡检",
+      "industry": "互联网 / 游戏 / 云",
+      "city": "待确认",
+      "deadline": "待确认",
+      "applyUrl": "https://join.qq.com/",
+      "status": "待投递",
+      "priority": "高",
+      "batch": "校招",
+      "companyType": "民营企业",
+      "education": "2027届优先确认",
+      "tags": [
+        "官网巡检",
+        "2027届",
+        "校招",
+        "互联网 / 游戏 / 云",
+        "校招"
+      ],
+      "description": "腾讯 官网页面出现这些招聘信号：校招\n暂未从首页抽取到具体岗位链接，需要后续写专属 adapter。\n页面标题：首页 | 腾讯校招",
+      "nextAction": "打开官网链接确认具体岗位，并为该公司补充专属 adapter。",
+      "source": "官网自动巡检",
+      "sourceProvider": "official-page",
+      "sourceUrl": "https://join.qq.com/",
+      "sourceStatus": "new",
+      "createdAt": "2026-07-20T11:19:46.336Z",
+      "updatedAt": "2026-07-20T11:19:46.336Z"
+    },
+    {
+      "company": "字节跳动",
+      "title": "校招官网巡检",
+      "industry": "互联网 / AI",
+      "city": "待确认",
+      "deadline": "待确认",
+      "applyUrl": "https://jobs.bytedance.com/",
+      "status": "待投递",
+      "priority": "高",
+      "batch": "校招",
+      "companyType": "民营企业",
+      "education": "2027届优先确认",
+      "tags": [
+        "官网巡检",
+        "2027届",
+        "校招",
+        "互联网 / AI",
+        "校招",
+        "校园招聘"
+      ],
+      "description": "字节跳动 官网页面出现这些招聘信号：校招、校园招聘\n页面内相关链接：社会招聘 https://jobs.bytedance.com/；全球招聘 https://joinbytedance.com/\n页面标题：字节跳动校园招聘官网｜字节跳动校招",
+      "nextAction": "打开官网链接确认具体岗位，并为该公司补充专属 adapter。",
+      "source": "官网自动巡检",
+      "sourceProvider": "official-page",
+      "sourceUrl": "https://jobs.bytedance.com/campus",
+      "sourceStatus": "new",
+      "createdAt": "2026-07-20T11:19:52.152Z",
+      "updatedAt": "2026-07-20T11:19:52.152Z"
+    },
+    {
+      "company": "阿里巴巴",
+      "title": "校招官网巡检",
+      "industry": "互联网 / 云计算 / 电商",
+      "city": "待确认",
+      "deadline": "待确认",
+      "applyUrl": "https://campus-talent.alibaba.com/campus/index",
+      "status": "待投递",
+      "priority": "高",
+      "batch": "校招",
+      "companyType": "民营企业",
+      "education": "2027届优先确认",
+      "tags": [
+        "官网巡检",
+        "2027届",
+        "校招",
+        "互联网 / 云计算 / 电商",
+        "校园招聘"
+      ],
+      "description": "阿里巴巴 官网页面出现这些招聘信号：校园招聘\n暂未从首页抽取到具体岗位链接，需要后续写专属 adapter。\n页面标题：阿里巴巴校园招聘",
+      "nextAction": "打开官网链接确认具体岗位，并为该公司补充专属 adapter。",
+      "source": "官网自动巡检",
+      "sourceProvider": "official-page",
+      "sourceUrl": "https://campus-talent.alibaba.com/",
+      "sourceStatus": "new",
+      "createdAt": "2026-07-20T11:19:55.600Z",
+      "updatedAt": "2026-07-20T11:19:55.600Z"
+    },
+    {
+      "company": "百度",
+      "title": "2027届校招官网巡检",
+      "industry": "互联网 / AI",
+      "city": "待确认",
+      "deadline": "待确认",
+      "applyUrl": "https://talent.baidu.com/static/index.html#/recruitHelp",
+      "status": "待投递",
+      "priority": "高",
+      "batch": "校招",
+      "companyType": "民营企业",
+      "education": "2027届优先确认",
+      "tags": [
+        "官网巡检",
+        "2027届",
+        "校招",
+        "互联网 / AI",
+        "2027",
+        "27届",
+        "2027届",
+        "校招",
+        "校园招聘",
+        "实习"
+      ],
+      "description": "百度 官网页面出现这些招聘信号：2027、27届、2027届、校招、校园招聘、实习\n页面内相关链接：招聘帮助 https://talent.baidu.com/static/index.html#/recruitHelp；百度校园 http://campus.baidu.com/\n页面标题：百度校园招聘",
+      "nextAction": "打开官网链接确认具体岗位，并为该公司补充专属 adapter。",
+      "source": "官网自动巡检",
+      "sourceProvider": "official-page",
+      "sourceUrl": "https://talent.baidu.com/jobs/campus",
+      "sourceStatus": "new",
+      "createdAt": "2026-07-20T11:20:01.736Z",
+      "updatedAt": "2026-07-20T11:20:01.736Z"
+    },
+    {
+      "company": "快手",
+      "title": "校招官网巡检",
+      "industry": "互联网 / 内容平台",
+      "city": "待确认",
+      "deadline": "待确认",
+      "applyUrl": "https://campus.kuaishou.cn/",
+      "status": "待投递",
+      "priority": "高",
+      "batch": "校招",
+      "companyType": "民营企业",
+      "education": "2027届优先确认",
+      "tags": [
+        "官网巡检",
+        "2027届",
+        "校招",
+        "互联网 / 内容平台",
+        "校招",
+        "校园招聘"
+      ],
+      "description": "快手 官网页面出现这些招聘信号：校招、校园招聘\n暂未从首页抽取到具体岗位链接，需要后续写专属 adapter。\n页面标题：快手校招",
+      "nextAction": "打开官网链接确认具体岗位，并为该公司补充专属 adapter。",
+      "source": "官网自动巡检",
+      "sourceProvider": "official-page",
+      "sourceUrl": "https://campus.kuaishou.cn/",
+      "sourceStatus": "new",
+      "createdAt": "2026-07-20T11:20:04.164Z",
+      "updatedAt": "2026-07-20T11:20:04.164Z"
+    },
+    {
+      "company": "京东",
+      "title": "校招官网巡检",
+      "industry": "电商 / 物流 / 科技",
+      "city": "待确认",
+      "deadline": "待确认",
+      "applyUrl": "https://campus.jd.com/",
+      "status": "待投递",
+      "priority": "中",
+      "batch": "校招",
+      "companyType": "民营企业",
+      "education": "2027届优先确认",
+      "tags": [
+        "官网巡检",
+        "2027届",
+        "校招",
+        "电商 / 物流 / 科技",
+        "校招"
+      ],
+      "description": "京东 官网页面出现这些招聘信号：校招\n暂未从首页抽取到具体岗位链接，需要后续写专属 adapter。\n页面标题：京东校招",
+      "nextAction": "打开官网链接确认具体岗位，并为该公司补充专属 adapter。",
+      "source": "官网自动巡检",
+      "sourceProvider": "official-page",
+      "sourceUrl": "https://campus.jd.com/",
+      "sourceStatus": "new",
+      "createdAt": "2026-07-20T11:20:08.233Z",
+      "updatedAt": "2026-07-20T11:20:08.233Z"
+    },
+    {
+      "company": "网易",
+      "title": "校招官网巡检",
+      "industry": "互联网 / 游戏 / 内容",
+      "city": "待确认",
+      "deadline": "待确认",
+      "applyUrl": "https://campus.163.com/",
+      "status": "待投递",
+      "priority": "中",
+      "batch": "校招",
+      "companyType": "民营企业",
+      "education": "2027届优先确认",
+      "tags": [
+        "官网巡检",
+        "2027届",
+        "校招",
+        "互联网 / 游戏 / 内容",
+        "校园招聘"
+      ],
+      "description": "网易 官网页面出现这些招聘信号：校园招聘\n暂未从首页抽取到具体岗位链接，需要后续写专属 adapter。\n页面标题：网易校园招聘",
+      "nextAction": "打开官网链接确认具体岗位，并为该公司补充专属 adapter。",
+      "source": "官网自动巡检",
+      "sourceProvider": "official-page",
+      "sourceUrl": "https://campus.163.com/",
+      "sourceStatus": "new",
+      "createdAt": "2026-07-20T11:20:11.132Z",
+      "updatedAt": "2026-07-20T11:20:11.132Z"
+    }
+  ],
+  "sourceReports": [
+    {
+      "sourceId": "tencent",
+      "company": "腾讯",
+      "url": "https://join.qq.com/",
+      "finalUrl": "https://join.qq.com/",
+      "status": "ok",
+      "httpStatus": 200,
+      "title": "首页 | 腾讯校招",
+      "signalHits": [
+        "校招"
+      ],
+      "matchedLinks": [],
+      "pageTextSample": "首页 | 腾讯校招",
+      "checkedAt": "2026-07-20T11:19:46.336Z",
+      "durationMs": 1972
+    },
+    {
+      "sourceId": "bytedance",
+      "company": "字节跳动",
+      "url": "https://jobs.bytedance.com/campus",
+      "finalUrl": "https://jobs.bytedance.com/campus",
+      "status": "ok",
+      "httpStatus": 200,
+      "title": "字节跳动校园招聘官网｜字节跳动校招",
+      "signalHits": [
+        "校招",
+        "校园招聘"
+      ],
+      "matchedLinks": [
+        {
+          "text": "社会招聘",
+          "href": "https://jobs.bytedance.com/"
+        },
+        {
+          "text": "全球招聘",
+          "href": "https://joinbytedance.com/"
+        }
+      ],
+      "pageTextSample": "字节跳动校园招聘官网｜字节跳动校招 --> 校园招聘 --> --> 输入城市或职位进行搜索 招聘项目 请添加一段描述性文字请添加一段描述性文字请添加一段描述性文字请添加一段描述性文字 添加一个标题 请添加一段描述性文字请添加一段描述性文字请添加一段描述性文字请添加一段描述性文字 添加一个标题 请添加一段描述性文字请添加一段描述性文字请添加一段描述性文字请添加一段描述性文字 添加一个标题 请添加一段描述性文字请添加一段描述性文字请添加一段描述性文字请添加一段描述性文字 添加一个标题 请添加一段描述性文字请添加一段描述性文字请添加一段描述性文字请添加一段描述性文字 字节范 ByteStyle 字节范是 ByteDancer 在追求使命、达成愿景的过程中共享的工作风格和方法 始终创业 保持创业心态，始终开创而不守成，创新而非依赖资源 \\n敏捷有效，最简化流程，避免简单事情复杂化 \\n对外敏锐谦逊，避免自满或优越感 坦诚清晰 表达真实想法，不怕暴露问题，反对“向上管理” \\n准确、简洁、直接，少用抽象、模糊、空泛的词 \\n就事论事，理性沟通，避免主观臆测和情绪化表达 多元兼容 欣赏个体多样性",
+      "checkedAt": "2026-07-20T11:19:52.152Z",
+      "durationMs": 5209
+    },
+    {
+      "sourceId": "alibaba",
+      "company": "阿里巴巴",
+      "url": "https://campus-talent.alibaba.com/",
+      "finalUrl": "https://campus-talent.alibaba.com/campus/index",
+      "status": "ok",
+      "httpStatus": 200,
+      "title": "阿里巴巴校园招聘",
+      "signalHits": [
+        "校园招聘"
+      ],
+      "matchedLinks": [],
+      "pageTextSample": "阿里巴巴校园招聘",
+      "checkedAt": "2026-07-20T11:19:55.600Z",
+      "durationMs": 2847
+    },
+    {
+      "sourceId": "meituan",
+      "company": "美团",
+      "url": "https://zhaopin.meituan.com/web/campus",
+      "finalUrl": "https://zhaopin.meituan.com/web/campus",
+      "status": "ok",
+      "httpStatus": 200,
+      "title": "美团招聘",
+      "signalHits": [],
+      "matchedLinks": [],
+      "pageTextSample": "美团招聘",
+      "checkedAt": "2026-07-20T11:19:58.128Z",
+      "durationMs": 1927
+    },
+    {
+      "sourceId": "baidu",
+      "company": "百度",
+      "url": "https://talent.baidu.com/jobs/campus",
+      "finalUrl": "https://talent.baidu.com/jobs/campus",
+      "status": "ok",
+      "httpStatus": 200,
+      "title": "百度校园招聘",
+      "signalHits": [
+        "2027",
+        "27届",
+        "2027届",
+        "校招",
+        "校园招聘",
+        "实习"
+      ],
+      "matchedLinks": [
+        {
+          "text": "招聘帮助",
+          "href": "https://talent.baidu.com/static/index.html#/recruitHelp"
+        },
+        {
+          "text": "百度校园",
+          "href": "http://campus.baidu.com/"
+        }
+      ],
+      "pageTextSample": "百度校园招聘 首页 职位 招聘动态 了解百度 登录 百度校园招聘 改变世界？不妨一试！ 百度一下 校招项目 百度集团面向在校大学生的招聘项目 校园招聘 立即投递 本次招聘面向2026年9月至2027年8月毕业的在校生，开放技术、产品、政企、销售、综合五大类岗位，覆盖北京、上海、深圳等城市。 AIDU计划 查看职位 AIDU计划于2018年启动，以攻克AI领域的前瞻性与突破性难题为核心使命，面向全球招募具备顶尖技术潜力的校园人才，致力于培养未来的AI领军人才，为AI前沿技术探索与产业应用落地注入新生力量。 管培生计划 查看职位 百度集团高管亲自选、亲自带的『管理培训生』计划，旨在培养AI时代科技创新企业的新一代年轻管理者。 实习生招聘 立即投递 面向在校生开放的实习时长不少于三个月的实习项目。2027届暑期实习项目已结束；日常实习项目全年开放且不限毕业时间。 0 业务介绍 MEG ACG AMU BMU IDG PSIG 小度 MEG 移动生态事业群组 百度移动生态是百度集团“三大增长曲线”之一，旗下涵盖百度APP、文心APP、文心助手、百家号、百度商业、电商、百科、百度联盟、百度健康等",
+      "checkedAt": "2026-07-20T11:20:01.736Z",
+      "durationMs": 3008
+    },
+    {
+      "sourceId": "kuaishou",
+      "company": "快手",
+      "url": "https://campus.kuaishou.cn/",
+      "finalUrl": "https://campus.kuaishou.cn/",
+      "status": "ok",
+      "httpStatus": 200,
+      "title": "快手校招",
+      "signalHits": [
+        "校招",
+        "校园招聘"
+      ],
+      "matchedLinks": [],
+      "pageTextSample": "快手校招 快手校园、快手校招、快手校园招聘、校招、快手校招培训、快Star-X、快手薪酬福利、快手工作环境 快手招聘官方平台，邀请来自国内外各界精英，了解快手、关注快手、加入快手，快手招聘无界限，让有才华、有创造性的我们共聚一堂，做点更有趣的事!",
+      "checkedAt": "2026-07-20T11:20:04.164Z",
+      "durationMs": 1827
+    },
+    {
+      "sourceId": "jd",
+      "company": "京东",
+      "url": "https://campus.jd.com/",
+      "finalUrl": "https://campus.jd.com/",
+      "status": "ok",
+      "httpStatus": 200,
+      "title": "京东校招",
+      "signalHits": [
+        "校招"
+      ],
+      "matchedLinks": [],
+      "pageTextSample": "京东校招",
+      "checkedAt": "2026-07-20T11:20:08.233Z",
+      "durationMs": 3469
+    },
+    {
+      "sourceId": "netease",
+      "company": "网易",
+      "url": "https://campus.163.com/",
+      "finalUrl": "https://campus.163.com/",
+      "status": "ok",
+      "httpStatus": 200,
+      "title": "网易校园招聘",
+      "signalHits": [
+        "校园招聘"
+      ],
+      "matchedLinks": [],
+      "pageTextSample": "网易校园招聘",
+      "checkedAt": "2026-07-20T11:20:11.132Z",
+      "durationMs": 2298
+    },
+    {
+      "sourceId": "xiaomi",
+      "company": "小米",
+      "url": "https://hr.xiaomi.com/campus",
+      "finalUrl": "https://hr.xiaomi.com/campus",
+      "status": "ok",
+      "httpStatus": 200,
+      "title": "小米招聘",
+      "signalHits": [],
+      "matchedLinks": [],
+      "pageTextSample": "小米招聘 You need to enable JavaScript to run this app.",
+      "checkedAt": "2026-07-20T11:20:13.551Z",
+      "durationMs": 1817
+    },
+    {
+      "sourceId": "huawei",
+      "company": "华为",
+      "url": "https://career.huawei.com/reccampportal",
+      "finalUrl": "https://career.huawei.com/reccampportal/",
+      "status": "ok",
+      "httpStatus": 200,
+      "title": "华为招聘",
+      "signalHits": [],
+      "matchedLinks": [],
+      "pageTextSample": "华为招聘",
+      "checkedAt": "2026-07-20T11:20:17.434Z",
+      "durationMs": 3282
+    },
+    {
+      "sourceId": "pinduoduo",
+      "company": "拼多多",
+      "url": "https://www.pinduoduo.com/campus.html",
+      "finalUrl": "https://www.pinduoduo.com/campus.html",
+      "status": "ok",
+      "httpStatus": 200,
+      "title": "",
+      "signalHits": [],
+      "matchedLinks": [],
+      "pageTextSample": "",
+      "checkedAt": "2026-07-20T11:20:19.962Z",
+      "durationMs": 1927
+    }
+  ]
+}

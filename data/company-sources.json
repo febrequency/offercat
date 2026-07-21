@@ -1,0 +1,101 @@
+[
+  {
+    "id": "tencent",
+    "company": "腾讯",
+    "industry": "互联网 / 游戏 / 云",
+    "provider": "official-page",
+    "careerUrl": "https://join.qq.com/",
+    "enabled": true,
+    "priority": 1
+  },
+  {
+    "id": "bytedance",
+    "company": "字节跳动",
+    "industry": "互联网 / AI",
+    "provider": "official-page",
+    "careerUrl": "https://jobs.bytedance.com/campus",
+    "enabled": true,
+    "priority": 1
+  },
+  {
+    "id": "alibaba",
+    "company": "阿里巴巴",
+    "industry": "互联网 / 云计算 / 电商",
+    "provider": "official-page",
+    "careerUrl": "https://campus-talent.alibaba.com/",
+    "enabled": true,
+    "priority": 1
+  },
+  {
+    "id": "meituan",
+    "company": "美团",
+    "industry": "本地生活 / 科技",
+    "provider": "official-page",
+    "careerUrl": "https://zhaopin.meituan.com/web/campus",
+    "enabled": true,
+    "priority": 1
+  },
+  {
+    "id": "baidu",
+    "company": "百度",
+    "industry": "互联网 / AI",
+    "provider": "official-page",
+    "careerUrl": "https://talent.baidu.com/jobs/campus",
+    "enabled": true,
+    "priority": 1
+  },
+  {
+    "id": "kuaishou",
+    "company": "快手",
+    "industry": "互联网 / 内容平台",
+    "provider": "official-page",
+    "careerUrl": "https://campus.kuaishou.cn/",
+    "enabled": true,
+    "priority": 1
+  },
+  {
+    "id": "jd",
+    "company": "京东",
+    "industry": "电商 / 物流 / 科技",
+    "provider": "official-page",
+    "careerUrl": "https://campus.jd.com/",
+    "enabled": true,
+    "priority": 2
+  },
+  {
+    "id": "netease",
+    "company": "网易",
+    "industry": "互联网 / 游戏 / 内容",
+    "provider": "official-page",
+    "careerUrl": "https://campus.163.com/",
+    "enabled": true,
+    "priority": 2
+  },
+  {
+    "id": "xiaomi",
+    "company": "小米",
+    "industry": "智能硬件 / 消费电子",
+    "provider": "official-page",
+    "careerUrl": "https://hr.xiaomi.com/campus",
+    "enabled": true,
+    "priority": 2
+  },
+  {
+    "id": "huawei",
+    "company": "华为",
+    "industry": "通信 / 云 / 硬件",
+    "provider": "official-page",
+    "careerUrl": "https://career.huawei.com/reccampportal",
+    "enabled": true,
+    "priority": 2
+  },
+  {
+    "id": "pinduoduo",
+    "company": "拼多多",
+    "industry": "电商 / 互联网",
+    "provider": "official-page",
+    "careerUrl": "https://www.pinduoduo.com/campus.html",
+    "enabled": true,
+    "priority": 2
+  }
+]
