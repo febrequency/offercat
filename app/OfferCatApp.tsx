@@ -1,6 +1,8 @@
 "use client";
 
-import { type CSSProperties, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
+
+type JobStatus = "待投递" | "收藏中" | "已投递" | "面试中";
 
 type Job = {
   id: string;
@@ -13,18 +15,89 @@ type Job = {
   batch: "校招" | "实习";
   companyType: string;
   education: string;
-  status: "待投递" | "收藏中" | "已投递" | "面试中";
+  status: JobStatus;
   tags: string[];
   updatedAt: string;
   description: string;
 };
 
-type Source = {
+type SourceLink = {
   id: string;
   name: string;
-  category: string;
+  region: string;
+  url: string;
   status: string;
-  detail: string;
+  note: string;
+};
+
+type ApplicationRecord = {
+  id: string;
+  company: string;
+  role: string;
+  direction: string;
+  companyType: string;
+  industry: string;
+  location: string;
+  recruitType: string;
+  channel: string;
+  applyDate: string;
+  status: string;
+  progress: string;
+  nextAction: string;
+  needsFollowUp: string;
+  offerStatus: string;
+  offerDeadline: string;
+  salary: string;
+  baseCity: string;
+  priority: string;
+  interest: string;
+  source: string;
+  applyUrl: string;
+  jd: string;
+  resumeVersion: string;
+  assessment: string;
+  writtenTest: string;
+  interview: string;
+  interviewRound: string;
+  interviewFormat: string;
+  interviewResult: string;
+  notes: string;
+  nextDeadline: string;
+};
+
+const blankApplication: ApplicationRecord = {
+  id: "",
+  company: "",
+  role: "",
+  direction: "",
+  companyType: "互联网",
+  industry: "",
+  location: "",
+  recruitType: "2027届秋招",
+  channel: "官网",
+  applyDate: "",
+  status: "准备投递",
+  progress: "",
+  nextAction: "",
+  needsFollowUp: "是",
+  offerStatus: "暂无",
+  offerDeadline: "",
+  salary: "",
+  baseCity: "",
+  priority: "P1",
+  interest: "高",
+  source: "",
+  applyUrl: "",
+  jd: "",
+  resumeVersion: "",
+  assessment: "未开始",
+  writtenTest: "未开始",
+  interview: "未开始",
+  interviewRound: "",
+  interviewFormat: "待确认",
+  interviewResult: "待确认",
+  notes: "",
+  nextDeadline: "",
 };
 
 const initialJobs: Job[] = [
@@ -93,12 +166,12 @@ const initialJobs: Job[] = [
     description: "网易校园招聘官网可访问，已识别校园招聘信号。",
   },
   {
-    id: "robo-sense",
+    id: "robosense-sample",
     company: "RoboSense",
     title: "智能驾驶 / 感知算法相关岗位",
     industry: "自动驾驶 / AI",
     city: "深圳、上海",
-    deadline: "7.15截止",
+    deadline: "待确认",
     applyUrl: "",
     batch: "校招",
     companyType: "民营企业",
@@ -106,35 +179,39 @@ const initialJobs: Job[] = [
     status: "待投递",
     tags: ["AI/算法", "自动驾驶", "机器学习算法", "软件研发"],
     updatedAt: "2026-07-21",
-    description: "来自腾讯文档压缩工作簿探针的结构化样例。",
+    description: "来自校招信息表结构的展示样例，等待正式数据源补齐。",
   },
 ];
 
-const sources: Source[] = [
+const sourceLinks: SourceLink[] = [
   {
-    id: "official-careers",
-    name: "头部公司官网巡检",
-    category: "公司官网",
-    status: "已跑通轻量巡检",
-    detail: "当前覆盖腾讯、字节、阿里、美团、百度、快手、京东、网易、小米、华为、拼多多等源。",
+    id: "intern-2027",
+    name: "27届实习提前批秋招汇总",
+    region: "互联网 / 综合",
+    url: "https://docs.qq.com/smartsheet/DRHVEc05MbE5CYUZa",
+    status: "先保留链接",
+    note: "等导出逻辑稳定后，再把公司、岗位、城市、截止时间映射进岗位库。",
   },
   {
-    id: "tencent-docs",
-    name: "腾讯文档校招表",
-    category: "在线文档",
-    status: "已验证可读取文本",
-    detail: "已从 opendoc 数据口解压出企业名称、招聘类型、城市、截止时间等字段。",
+    id: "south-state-owned",
+    name: "华南央国企校招信息分享表",
+    region: "广东 / 广西 / 海南",
+    url: "https://docs.qq.com/sheet/DRHBtRmpoRk5OSEZy",
+    status: "先保留链接",
+    note: "适合作为央国企来源，后续可按地区、公司性质和网申入口清洗。",
   },
   {
-    id: "ats-providers",
-    name: "Greenhouse / Lever / Ashby",
-    category: "ATS 平台",
-    status: "适合后续接入",
-    detail: "这些平台提供结构化公开接口，适合补充海外 AI 公司、外企和创业公司岗位。",
+    id: "yangtze-state-owned",
+    name: "江浙沪央国企校招信息分享表",
+    region: "江苏 / 浙江 / 上海",
+    url: "https://docs.qq.com/sheet/DRGtwaFNWWFJLU2V5",
+    status: "先保留链接",
+    note: "适合补齐长三角地区岗位，暂时以外链方式保留在信息源中心。",
   },
 ];
 
-const navItems = ["职位信息", "数据源", "我的秋招", "面试日历"] as const;
+const navItems = ["职位信息", "信息源", "我的秋招", "面试日历"] as const;
+const applicationStorageKey = "offercat-applications-v1";
 
 export default function OfferCatApp() {
   const [activeView, setActiveView] = useState<(typeof navItems)[number]>("职位信息");
@@ -143,9 +220,24 @@ export default function OfferCatApp() {
   const [city, setCity] = useState("全部");
   const [batch, setBatch] = useState("全部");
   const [tag, setTag] = useState("全部");
-  const [dogPosition, setDogPosition] = useState({ x: 72, y: 72 });
-  const [offerCount, setOfferCount] = useState(0);
-  const [isDogHappy, setIsDogHappy] = useState(false);
+  const [form, setForm] = useState<ApplicationRecord>(blankApplication);
+  const [applications, setApplications] = useState<ApplicationRecord[]>([]);
+  const [formMessage, setFormMessage] = useState("");
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(applicationStorageKey);
+    if (!saved) return;
+
+    try {
+      setApplications(JSON.parse(saved));
+    } catch {
+      window.localStorage.removeItem(applicationStorageKey);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(applicationStorageKey, JSON.stringify(applications));
+  }, [applications]);
 
   const cityOptions = useMemo(
     () => ["全部", ...Array.from(new Set(jobs.flatMap((job) => job.city.split(/[、,，/]/)).map((item) => item.trim()).filter(Boolean)))],
@@ -170,24 +262,9 @@ export default function OfferCatApp() {
     );
   });
 
-  useEffect(() => {
-    const route = [
-      { x: 72, y: 72 },
-      { x: 18, y: 66 },
-      { x: 42, y: 78 },
-      { x: 78, y: 58 },
-      { x: 10, y: 74 },
-    ];
-    let index = 0;
-    const timer = window.setInterval(() => {
-      index = (index + 1) % route.length;
-      setDogPosition(route[index]);
-    }, 3600);
+  const activeRecords = applications.filter((item) => item.status !== "已结束");
 
-    return () => window.clearInterval(timer);
-  }, []);
-
-  function updateJobStatus(jobId: string, status: Job["status"]) {
+  function updateJobStatus(jobId: string, status: JobStatus) {
     setJobs((current) => current.map((job) => (job.id === jobId ? { ...job, status } : job)));
   }
 
@@ -224,22 +301,41 @@ export default function OfferCatApp() {
     }
   }
 
-  function petOfferDog() {
-    setOfferCount((current) => current + 1);
-    setIsDogHappy(true);
-    window.setTimeout(() => setIsDogHappy(false), 850);
+  function updateForm<K extends keyof ApplicationRecord>(key: K, value: ApplicationRecord[K]) {
+    setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function submitApplication(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!form.company.trim() || !form.role.trim()) {
+      setFormMessage("先填公司和岗位名称，offercat 才能帮你建档。");
+      return;
+    }
+
+    const nextRecord: ApplicationRecord = {
+      ...form,
+      id: window.crypto?.randomUUID?.() || `${Date.now()}`,
+    };
+
+    setApplications((current) => [nextRecord, ...current]);
+    setForm(blankApplication);
+    setFormMessage("已加入我的秋招记录。");
+  }
+
+  function removeApplication(id: string) {
+    setApplications((current) => current.filter((item) => item.id !== id));
   }
 
   return (
     <main className="site-shell">
       <header className="site-header">
-        <div className="brand">
+        <button className="brand" onClick={() => setActiveView("职位信息")} type="button">
           <img src="/assets/offercat-mark.svg" alt="" />
-          <div>
-            <strong>OfferCat</strong>
-            <span>offer tracker</span>
-          </div>
-        </div>
+          <span>
+            <strong>offercat</strong>
+            秋招信息工作台
+          </span>
+        </button>
         <nav aria-label="主导航">
           {navItems.map((item) => (
             <button
@@ -263,81 +359,36 @@ export default function OfferCatApp() {
 
       <section className="hero">
         <div className="hero-copy">
-          <span className="eyebrow">OfferCat Intelligence</span>
-          <h1>把秋招情报，整理成会长 offer 的桌面。</h1>
-          <p>官网巡检、岗位筛选、投递状态和面试提醒都收进一个柔软的工作台，像贴在桌面上的小窗口一样随手翻。</p>
+          <span className="eyebrow">2027 AUTUMN RECRUITING</span>
+          <h1>把分散的秋招信息，变成自己的投递节奏。</h1>
+          <p>
+            offercat 先帮你收住信息源、岗位库和投递记录。官网数据暂时无法稳定导出时，入口先保留；
+            等抓取规则成熟后，再把它们自动整理进你的工作台。
+          </p>
           <div className="hero-actions">
-            <button onClick={() => setActiveView("职位信息")} type="button">
-              <span aria-hidden="true">+</span>
-              看岗位库
-            </button>
-            <button onClick={() => setActiveView("我的秋招")} type="button">
-              <span aria-hidden="true">✓</span>
-              看进度
-            </button>
+            <button onClick={() => setActiveView("信息源")} type="button">查看信息源</button>
+            <button onClick={() => setActiveView("我的秋招")} type="button">填写投递问卷</button>
           </div>
         </div>
-        <div className="hero-stage" aria-label="OfferCat 主视觉">
-          <img className="hero-reference" src="/assets/showcase/mad-reference.png" alt="粉橙色浮层卡片风格参考主视觉" />
-          <div className="floating-window floating-window--logo">
-            <span>O</span>
-            <strong>C</strong>
+        <div className="hero-board" aria-label="offercat 数据概览">
+          <div className="board-topline">
+            <span>offercat live desk</span>
+            <strong>{new Date().toISOString().slice(0, 10)}</strong>
           </div>
-          <div className="floating-window floating-window--pitch">
-            <small>OfferCat.app</small>
-            <h2>Jobs, notes and deadlines in one soft workspace.</h2>
-            <p>校招情报自动归档，投递动作每天轻一点。</p>
-            <button aria-label="打开岗位概览" onClick={() => setActiveView("职位信息")} type="button">↗</button>
+          <div className="board-metrics">
+            <Metric label="岗位线索" value={jobs.length} />
+            <Metric label="信息源" value={sourceLinks.length} />
+            <Metric label="我的记录" value={applications.length} />
           </div>
-          <div className="floating-window floating-window--reminders">
-            <small>Today</small>
-            <h3>Commandments <span>{jobs.length}</span></h3>
-            {["投递前先确认官网", "收藏高匹配岗位", "记录 deadline", "面试后写复盘"].map((item) => (
-              <p key={item}><i aria-hidden="true" />{item}</p>
+          <div className="board-list">
+            {sourceLinks.map((source) => (
+              <a href={source.url} key={source.id} rel="noreferrer" target="_blank">
+                <span>{source.region}</span>
+                <strong>{source.name}</strong>
+              </a>
             ))}
-            <button aria-label="新增提醒" type="button">+</button>
-          </div>
-          <div className="bubble-nav bubble-nav--about">Jobs</div>
-          <div className="bubble-nav bubble-nav--team">Sources</div>
-          <div className="bubble-nav bubble-nav--work">Pipeline</div>
-          <div className="bubble-nav bubble-nav--contact">Calendar</div>
-          <div className="social-dock" aria-label="快捷入口">
-            <button aria-label="灵感入口" type="button">◎</button>
-            <button aria-label="动态入口" type="button">◆</button>
           </div>
         </div>
-      </section>
-
-      <section className="metrics" aria-label="岗位概览">
-        <Metric label="可投递岗位" value={jobs.length} />
-        <Metric label="当前筛选结果" value={filteredJobs.length} />
-        <Metric label="已进入流程" value={jobs.filter((job) => job.status === "已投递" || job.status === "面试中").length} />
-        <Metric label="摸狗获得 offer" value={offerCount} />
-      </section>
-
-      <section className="spotlight-grid" aria-label="今日重点">
-        <article className="note-window">
-          <span>All about offers</span>
-          <h2>今日优先级</h2>
-          {[
-            ["百度", "确认 2027 届校招入口"],
-            ["字节跳动", "补充岗位方向标签"],
-            ["RoboSense", "记录 7.15 截止线索"],
-          ].map(([company, detail]) => (
-            <p key={company}><strong>{company}</strong>{detail}</p>
-          ))}
-        </article>
-        <article className="mini-browser">
-          <span>Offer_Note.html</span>
-          <h2>投递小抄</h2>
-          <p>先看岗位信号，再按城市、方向和截止时间筛一轮，把感兴趣的机会扔进流程。</p>
-          <button onClick={() => setActiveView("数据源")} type="button">All Sources</button>
-        </article>
-        <article className="case-window">
-          <span>Interactive case</span>
-          <h2>摸摸狗头，offer +1</h2>
-          <p>页面里的狗狗会自己巡逻。点它一下，头顶会冒出新的 offer 计数。</p>
-        </article>
       </section>
 
       <section className="workspace-panel">
@@ -346,7 +397,7 @@ export default function OfferCatApp() {
             <span>Workspace</span>
             <h2>{activeView}</h2>
           </div>
-          <strong>{filteredJobs.length} jobs visible</strong>
+          <strong>{activeView === "我的秋招" ? `${activeRecords.length} 个进行中` : `${filteredJobs.length} 个岗位可见`}</strong>
         </div>
 
         {activeView === "职位信息" && (
@@ -392,62 +443,50 @@ export default function OfferCatApp() {
           </>
         )}
 
-        {activeView === "数据源" && (
-          <section className="source-grid">
-            {sources.map((source) => (
-              <article className="source-card" key={source.id}>
-                <span>{source.category}</span>
-                <h2>{source.name}</h2>
-                <strong>{source.status}</strong>
-                <p>{source.detail}</p>
-              </article>
-            ))}
-            <article className="source-card action-card">
-              <span>导入</span>
-              <h2>导入官网巡检结果</h2>
-              <p>把脚本生成的官网校招信号加入当前职位库，之后可升级成定时自动同步。</p>
-              <button onClick={importOfficialSignals} type="button">导入官网巡检结果</button>
-            </article>
+        {activeView === "信息源" && (
+          <section className="source-area">
+            <div className="source-intro">
+              <span>Source center</span>
+              <h3>先把三个外部信息源安稳放在这里。</h3>
+              <p>
+                这一步不强行抓取不稳定数据，先给每个来源留下入口、定位和后续清洗说明。
+                后面能导出时，再接成自动同步。
+              </p>
+              <button onClick={importOfficialSignals} type="button">导入已有官网巡检结果</button>
+            </div>
+            <div className="source-grid">
+              {sourceLinks.map((source) => (
+                <article className="source-card" key={source.id}>
+                  <span>{source.region}</span>
+                  <h3>{source.name}</h3>
+                  <strong>{source.status}</strong>
+                  <p>{source.note}</p>
+                  <a href={source.url} rel="noreferrer" target="_blank">打开信息源</a>
+                </article>
+              ))}
+            </div>
           </section>
         )}
 
         {activeView === "我的秋招" && (
-          <section className="kanban">
-            {["收藏中", "待投递", "已投递", "面试中"].map((status) => (
-              <div key={status}>
-                <h2>{status}</h2>
-                {jobs.filter((job) => job.status === status).map((job) => (
-                  <article key={job.id}>
-                    <strong>{job.company}</strong>
-                    <span>{job.title}</span>
-                  </article>
-                ))}
-              </div>
-            ))}
+          <section className="application-area">
+            <ApplicationForm
+              form={form}
+              formMessage={formMessage}
+              onChange={updateForm}
+              onSubmit={submitApplication}
+            />
+            <ApplicationRecords records={applications} onRemove={removeApplication} />
           </section>
         )}
 
         {activeView === "面试日历" && (
           <section className="empty-panel">
-            <h2>面试日历</h2>
-            <p>下一步会把投递流程里的笔试、面试、复盘和提醒统一放到这里。</p>
+            <h3>面试日历</h3>
+            <p>下一步可以把问卷里的笔试、面试轮次、下一步截止时间自动汇总到这里。</p>
           </section>
         )}
       </section>
-
-      <button
-        aria-label="摸摸狗头，增加 offer 计数"
-        className={`dog-buddy ${isDogHappy ? "dog-buddy--happy" : ""}`}
-        onPointerDown={petOfferDog}
-        style={{
-          "--dog-x": `${dogPosition.x}vw`,
-          "--dog-y": `${dogPosition.y}vh`,
-        } as CSSProperties}
-        type="button"
-      >
-        <span className="offer-pop" key={offerCount}>{offerCount > 0 ? `offer +${offerCount}` : "offer +1"}</span>
-        <video aria-hidden="true" autoPlay loop muted playsInline src="/assets/showcase/offer-dog.mp4" />
-      </button>
     </main>
   );
 }
@@ -466,7 +505,7 @@ function JobsTable({
   onStatusChange,
 }: {
   jobs: Job[];
-  onStatusChange: (jobId: string, status: Job["status"]) => void;
+  onStatusChange: (jobId: string, status: JobStatus) => void;
 }) {
   return (
     <section className="table-panel">
@@ -509,7 +548,7 @@ function JobsTable({
                 <td>{job.updatedAt}</td>
                 <td>
                   <div className="cities">
-                    {job.city.split(/[、,，/]/).slice(0, 5).map((city) => <span key={city}>{city}</span>)}
+                    {job.city.split(/[、,，/]/).slice(0, 5).map((item) => <span key={item}>{item}</span>)}
                   </div>
                 </td>
                 <td>
@@ -521,6 +560,174 @@ function JobsTable({
             ))}
           </tbody>
         </table>
+      </div>
+    </section>
+  );
+}
+
+function ApplicationForm({
+  form,
+  formMessage,
+  onChange,
+  onSubmit,
+}: {
+  form: ApplicationRecord;
+  formMessage: string;
+  onChange: <K extends keyof ApplicationRecord>(key: K, value: ApplicationRecord[K]) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <form className="application-form" onSubmit={onSubmit}>
+      <div className="form-heading">
+        <span>Application questionnaire</span>
+        <h3>填写一次，生成一条自己的投递记录。</h3>
+        <p>字段参考你的秋招信息追踪表，先覆盖公司、岗位、投递、笔试面试和 offer 关键状态。</p>
+      </div>
+
+      <div className="form-section">
+        <h4>基础信息</h4>
+        <Field label="公司" required value={form.company} onChange={(value) => onChange("company", value)} />
+        <Field label="岗位名称" required value={form.role} onChange={(value) => onChange("role", value)} />
+        <Field label="岗位方向" value={form.direction} onChange={(value) => onChange("direction", value)} />
+        <Field label="行业" value={form.industry} onChange={(value) => onChange("industry", value)} />
+        <Field label="工作地点" value={form.location} onChange={(value) => onChange("location", value)} />
+        <SelectField label="公司类型" value={form.companyType} options={["互联网", "央国企", "外企", "民营企业", "高校/科研", "其他"]} onChange={(value) => onChange("companyType", value)} />
+      </div>
+
+      <div className="form-section">
+        <h4>投递状态</h4>
+        <SelectField label="招聘类型" value={form.recruitType} options={["2027届秋招", "实习提前批", "暑期实习", "日常实习", "补录"]} onChange={(value) => onChange("recruitType", value)} />
+        <SelectField label="投递渠道" value={form.channel} options={["官网", "内推", "公众号", "牛客", "腾讯文档", "其他"]} onChange={(value) => onChange("channel", value)} />
+        <Field label="投递日期" type="date" value={form.applyDate} onChange={(value) => onChange("applyDate", value)} />
+        <SelectField label="当前状态" value={form.status} options={["准备投递", "已投递", "测评中", "笔试中", "面试中", "Offer", "已结束"]} onChange={(value) => onChange("status", value)} />
+        <SelectField label="优先级" value={form.priority} options={["P0", "P1", "P2", "P3"]} onChange={(value) => onChange("priority", value)} />
+        <SelectField label="意向程度" value={form.interest} options={["高", "中", "低", "观望"]} onChange={(value) => onChange("interest", value)} />
+      </div>
+
+      <div className="form-section">
+        <h4>流程跟进</h4>
+        <Field label="最新进展" value={form.progress} onChange={(value) => onChange("progress", value)} />
+        <Field label="下一步事项" value={form.nextAction} onChange={(value) => onChange("nextAction", value)} />
+        <Field label="下一步截止时间" type="datetime-local" value={form.nextDeadline} onChange={(value) => onChange("nextDeadline", value)} />
+        <SelectField label="是否需要跟进" value={form.needsFollowUp} options={["是", "否"]} onChange={(value) => onChange("needsFollowUp", value)} />
+        <SelectField label="是否测评" value={form.assessment} options={["未开始", "进行中", "已完成", "无"]} onChange={(value) => onChange("assessment", value)} />
+        <SelectField label="是否笔试" value={form.writtenTest} options={["未开始", "进行中", "已完成", "无"]} onChange={(value) => onChange("writtenTest", value)} />
+        <SelectField label="是否面试" value={form.interview} options={["未开始", "等待安排", "面试中", "已完成", "无"]} onChange={(value) => onChange("interview", value)} />
+        <Field label="面试轮次" value={form.interviewRound} onChange={(value) => onChange("interviewRound", value)} />
+        <SelectField label="面试形式" value={form.interviewFormat} options={["待确认", "线上", "线下", "电话", "群面"]} onChange={(value) => onChange("interviewFormat", value)} />
+        <SelectField label="面试结果" value={form.interviewResult} options={["待确认", "通过", "未通过", "等待反馈"]} onChange={(value) => onChange("interviewResult", value)} />
+      </div>
+
+      <div className="form-section form-section--wide">
+        <h4>链接与 offer</h4>
+        <Field label="信息来源" value={form.source} onChange={(value) => onChange("source", value)} />
+        <Field label="网申链接" type="url" value={form.applyUrl} onChange={(value) => onChange("applyUrl", value)} />
+        <Field label="简历版本" value={form.resumeVersion} onChange={(value) => onChange("resumeVersion", value)} />
+        <SelectField label="Offer情况" value={form.offerStatus} options={["暂无", "已收到", "已拒绝", "已接受", "等待中"]} onChange={(value) => onChange("offerStatus", value)} />
+        <Field label="Offer截止日期" type="date" value={form.offerDeadline} onChange={(value) => onChange("offerDeadline", value)} />
+        <Field label="薪资（年包）" value={form.salary} onChange={(value) => onChange("salary", value)} />
+        <Field label="Base城市" value={form.baseCity} onChange={(value) => onChange("baseCity", value)} />
+        <label className="field field--textarea">
+          JD
+          <textarea value={form.jd} onChange={(event) => onChange("jd", event.target.value)} placeholder="粘贴岗位描述或关键词" />
+        </label>
+        <label className="field field--textarea">
+          备注
+          <textarea value={form.notes} onChange={(event) => onChange("notes", event.target.value)} placeholder="记录联系人、复盘、注意事项" />
+        </label>
+      </div>
+
+      <div className="form-actions">
+        <button type="submit">保存到我的秋招</button>
+        {formMessage && <span>{formMessage}</span>}
+      </div>
+    </form>
+  );
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  type = "text",
+  required = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  required?: boolean;
+}) {
+  return (
+    <label className="field">
+      {label}
+      <input required={required} type={type} value={value} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: string[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="field">
+      {label}
+      <select value={value} onChange={(event) => onChange(event.target.value)}>
+        {options.map((option) => <option key={option}>{option}</option>)}
+      </select>
+    </label>
+  );
+}
+
+function ApplicationRecords({
+  records,
+  onRemove,
+}: {
+  records: ApplicationRecord[];
+  onRemove: (id: string) => void;
+}) {
+  if (records.length === 0) {
+    return (
+      <section className="record-panel record-panel--empty">
+        <h3>还没有投递记录</h3>
+        <p>填完左侧问卷后，这里会自动生成你的秋招追踪卡片。</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="record-panel">
+      <div className="record-heading">
+        <span>Application records</span>
+        <h3>我的投递记录</h3>
+      </div>
+      <div className="record-list">
+        {records.map((record) => (
+          <article className="record-card" key={record.id}>
+            <div>
+              <span>{record.priority} · {record.interest}意向</span>
+              <h4>{record.company} · {record.role}</h4>
+              <p>{record.location || "地点待确认"} / {record.recruitType} / {record.channel}</p>
+            </div>
+            <dl>
+              <div><dt>当前状态</dt><dd>{record.status}</dd></div>
+              <div><dt>下一步</dt><dd>{record.nextAction || "待补充"}</dd></div>
+              <div><dt>截止时间</dt><dd>{record.nextDeadline || record.offerDeadline || "待确认"}</dd></div>
+            </dl>
+            <div className="record-actions">
+              {record.applyUrl && <a href={record.applyUrl} rel="noreferrer" target="_blank">打开网申</a>}
+              <button onClick={() => onRemove(record.id)} type="button">删除</button>
+            </div>
+          </article>
+        ))}
       </div>
     </section>
   );
