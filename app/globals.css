@@ -127,7 +127,13 @@ button {
 .row-actions a,
 .row-actions button,
 .calendar-controls button,
-.todo-add button {
+.todo-add button,
+.composer-actions button,
+.todo-toolbar-actions button,
+.todo-entry-form button,
+.todo-data-row button,
+.selected-day-panel button,
+.selected-event button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -160,7 +166,12 @@ button {
 .field select,
 .field textarea,
 .todo-add input,
-.todo-add select {
+.todo-add select,
+.event-composer input,
+.event-composer select,
+.event-composer textarea,
+.todo-entry-form input,
+.todo-entry-form select {
   width: 100%;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.72);
@@ -812,7 +823,8 @@ td {
 .legend-dot--deadline,
 .calendar-event--deadline,
 .selected-event--deadline,
-.todo-item--deadline {
+.todo-item--deadline,
+.todo-data-row--deadline {
   --event-color: #e4503a;
   --event-bg: #fff0ed;
 }
@@ -820,7 +832,8 @@ td {
 .legend-dot--interview,
 .calendar-event--interview,
 .selected-event--interview,
-.todo-item--interview {
+.todo-item--interview,
+.todo-data-row--interview {
   --event-color: #6f49d8;
   --event-bg: #f4efff;
 }
@@ -828,7 +841,8 @@ td {
 .legend-dot--written,
 .calendar-event--written,
 .selected-event--written,
-.todo-item--written {
+.todo-item--written,
+.todo-data-row--written {
   --event-color: #2f72d9;
   --event-bg: #eef5ff;
 }
@@ -836,7 +850,8 @@ td {
 .legend-dot--follow,
 .calendar-event--follow,
 .selected-event--follow,
-.todo-item--follow {
+.todo-item--follow,
+.todo-data-row--follow {
   --event-color: #2f9562;
   --event-bg: #ecf8f1;
 }
@@ -844,7 +859,8 @@ td {
 .legend-dot--offer,
 .calendar-event--offer,
 .selected-event--offer,
-.todo-item--offer {
+.todo-item--offer,
+.todo-data-row--offer {
   --event-color: #d98b11;
   --event-bg: #fff6de;
 }
@@ -852,7 +868,8 @@ td {
 .legend-dot--todo,
 .calendar-event--todo,
 .selected-event--todo,
-.todo-item--todo {
+.todo-item--todo,
+.todo-data-row--todo {
   --event-color: #806f60;
   --event-bg: #f7f0e8;
 }
@@ -1127,6 +1144,304 @@ td {
   opacity: 0.58;
 }
 
+.selected-day-panel > div > button {
+  margin-top: 14px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  padding: 0 14px;
+}
+
+.selected-event {
+  grid-template-columns: 94px 1fr auto auto;
+}
+
+.selected-event button {
+  min-height: 32px;
+  border: 1px solid color-mix(in srgb, var(--event-color) 32%, white);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--event-color);
+  padding: 0 10px;
+}
+
+.event-composer {
+  margin-top: 18px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 22px 52px rgba(91, 55, 24, 0.12);
+}
+
+.composer-title-row {
+  display: grid;
+  grid-template-columns: 1fr 42px;
+  gap: 12px;
+  align-items: center;
+}
+
+.composer-title-row input {
+  height: 54px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-strong);
+  font-size: 28px;
+  font-weight: 850;
+  outline: 0;
+}
+
+.composer-title-row button {
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--muted);
+  font-size: 24px;
+}
+
+.composer-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.composer-grid label {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.event-composer input,
+.event-composer select {
+  height: 44px;
+  border-radius: 14px;
+  padding: 0 12px;
+}
+
+.event-composer textarea {
+  min-height: 92px;
+  border-radius: 16px;
+  padding: 12px;
+  resize: vertical;
+}
+
+.composer-wide {
+  grid-column: 1 / -1;
+}
+
+.composer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.composer-actions button {
+  min-width: 112px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--muted);
+}
+
+.composer-actions button:last-child {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.offer-todo-page {
+  display: grid;
+  gap: 18px;
+}
+
+.todo-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.todo-summary-grid .metric:nth-child(1) strong {
+  color: var(--blue);
+}
+
+.todo-summary-grid .metric:nth-child(2) strong {
+  color: #28b92a;
+}
+
+.todo-summary-grid .metric:nth-child(3) strong {
+  color: #e6a800;
+}
+
+.todo-summary-grid .metric:nth-child(4) strong {
+  color: #f05b57;
+}
+
+.todo-table-panel {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.todo-table-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.todo-table-toolbar span {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.todo-table-toolbar h3 {
+  margin: 8px 0 0;
+  color: var(--ink-strong);
+  font-size: 24px;
+}
+
+.todo-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.todo-toolbar-actions button,
+.todo-entry-form button {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--muted);
+  padding: 0 14px;
+}
+
+.todo-toolbar-actions button:first-child,
+.todo-entry-form button {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.todo-entry-form {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) 150px 140px 130px 120px auto;
+  gap: 10px;
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--line);
+  background: #fff8ee;
+}
+
+.todo-entry-form input,
+.todo-entry-form select {
+  height: 42px;
+  border-radius: 12px;
+  padding: 0 12px;
+}
+
+.todo-data-table {
+  overflow-x: auto;
+}
+
+.todo-data-head,
+.todo-data-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.5fr) 150px 150px 132px 130px 110px 92px;
+  min-width: 1120px;
+}
+
+.todo-data-head {
+  border-bottom: 1px solid var(--line);
+  background: #fff3e2;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.todo-data-head span,
+.todo-data-row > * {
+  display: flex;
+  min-height: 54px;
+  align-items: center;
+  padding: 10px 14px;
+  border-right: 1px solid rgba(234, 215, 191, 0.8);
+}
+
+.todo-data-head span:last-child,
+.todo-data-row > *:last-child {
+  border-right: 0;
+}
+
+.todo-data-row {
+  border-bottom: 1px solid rgba(234, 215, 191, 0.8);
+  color: var(--ink);
+}
+
+.todo-data-row strong {
+  color: var(--ink-strong);
+  font-size: 15px;
+}
+
+.todo-data-row span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.todo-data-row button {
+  width: fit-content;
+  min-height: 32px;
+  align-self: center;
+  border: 1px solid color-mix(in srgb, var(--event-color, var(--accent)) 28%, white);
+  background: var(--event-bg, #fff);
+  color: var(--event-color, var(--accent-dark));
+  padding: 0 10px;
+}
+
+.todo-data-row--done strong,
+.todo-data-row--done span {
+  text-decoration: line-through;
+  opacity: 0.56;
+}
+
+.priority-pill {
+  width: fit-content;
+  min-height: 28px;
+  align-self: center;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.priority-pill--p0 {
+  background: #ffe2e1;
+  color: #c92d2a;
+}
+
+.priority-pill--p1 {
+  background: #fff1cf;
+  color: #a86200;
+}
+
+.priority-pill--p2 {
+  background: #eaf2ff;
+  color: var(--blue);
+}
+
+.priority-pill--p3 {
+  background: #f4f0ec;
+  color: var(--muted);
+}
+
 @media (max-width: 1180px) {
   .site-header,
   .filters,
@@ -1153,6 +1468,14 @@ td {
 
   .calendar-grid {
     grid-template-columns: repeat(7, minmax(104px, 1fr));
+  }
+
+  .todo-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .todo-entry-form {
+    grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(130px, 0.5fr));
   }
 }
 
@@ -1209,7 +1532,10 @@ td {
   .source-grid,
   .selected-day-panel,
   .todo-add,
-  .todo-item {
+  .todo-item,
+  .composer-grid,
+  .todo-summary-grid,
+  .todo-entry-form {
     grid-template-columns: 1fr;
   }
 
@@ -1226,7 +1552,8 @@ td {
   .table-meta,
   .record-heading,
   .calendar-toolbar,
-  .todo-strip-heading {
+  .todo-strip-heading,
+  .todo-table-toolbar {
     align-items: flex-start;
     flex-direction: column;
   }
@@ -1237,5 +1564,9 @@ td {
 
   .calendar-day {
     min-height: 116px;
+  }
+
+  .composer-title-row input {
+    font-size: 22px;
   }
 }

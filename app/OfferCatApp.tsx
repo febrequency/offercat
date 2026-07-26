@@ -72,8 +72,11 @@ type CalendarEvent = {
   title: string;
   date: string;
   time?: string;
+  endTime?: string;
   kind: CalendarEventKind;
   source: string;
+  location?: string;
+  description?: string;
 };
 
 type CalendarTodo = {
@@ -82,6 +85,8 @@ type CalendarTodo = {
   due: string;
   kind: CalendarEventKind;
   done: boolean;
+  priority: "P0" | "P1" | "P2" | "P3";
+  owner: string;
 };
 
 const blankApplication: ApplicationRecord = {
@@ -229,9 +234,10 @@ const sourceLinks: SourceLink[] = [
   },
 ];
 
-const navItems = ["职位信息", "信息源", "我的秋招", "面试日历"] as const;
+const navItems = ["职位信息", "信息源", "我的秋招", "Offer日历", "Offer Todo"] as const;
 const applicationStorageKey = "offercat-applications-v1";
 const calendarTodoStorageKey = "offercat-calendar-todos-v1";
+const calendarEventStorageKey = "offercat-calendar-events-v1";
 const weekdayLabels = ["日", "一", "二", "三", "四", "五", "六"];
 
 const defaultCalendarTodos: CalendarTodo[] = [
@@ -241,6 +247,8 @@ const defaultCalendarTodos: CalendarTodo[] = [
     due: "2026-07-27",
     kind: "todo",
     done: false,
+    priority: "P1",
+    owner: "我",
   },
   {
     id: "todo-tencent-source",
@@ -248,6 +256,8 @@ const defaultCalendarTodos: CalendarTodo[] = [
     due: "2026-07-29",
     kind: "follow",
     done: false,
+    priority: "P0",
+    owner: "我",
   },
   {
     id: "todo-netease-deadline",
@@ -255,6 +265,8 @@ const defaultCalendarTodos: CalendarTodo[] = [
     due: "2026-08-01",
     kind: "deadline",
     done: false,
+    priority: "P1",
+    owner: "我",
   },
 ];
 
@@ -293,6 +305,16 @@ const seedCalendarEvents: CalendarEvent[] = [
   },
 ];
 
+const blankCalendarEvent: Omit<CalendarEvent, "id" | "source"> = {
+  title: "",
+  date: "2026-07-26",
+  time: "13:00",
+  endTime: "13:30",
+  kind: "interview",
+  location: "",
+  description: "",
+};
+
 export default function OfferCatApp() {
   const [activeView, setActiveView] = useState<(typeof navItems)[number]>("职位信息");
   const [jobs, setJobs] = useState<Job[]>(initialJobs);
@@ -304,6 +326,7 @@ export default function OfferCatApp() {
   const [applications, setApplications] = useState<ApplicationRecord[]>([]);
   const [formMessage, setFormMessage] = useState("");
   const [calendarTodos, setCalendarTodos] = useState<CalendarTodo[]>(defaultCalendarTodos);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
 
   useEffect(() => {
     const saved = window.localStorage.getItem(applicationStorageKey);
@@ -325,7 +348,7 @@ export default function OfferCatApp() {
     if (!saved) return;
 
     try {
-      setCalendarTodos(JSON.parse(saved));
+      setCalendarTodos(JSON.parse(saved).map(normalizeTodo));
     } catch {
       window.localStorage.removeItem(calendarTodoStorageKey);
     }
@@ -334,6 +357,21 @@ export default function OfferCatApp() {
   useEffect(() => {
     window.localStorage.setItem(calendarTodoStorageKey, JSON.stringify(calendarTodos));
   }, [calendarTodos]);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(calendarEventStorageKey);
+    if (!saved) return;
+
+    try {
+      setCalendarEvents(JSON.parse(saved));
+    } catch {
+      window.localStorage.removeItem(calendarEventStorageKey);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(calendarEventStorageKey, JSON.stringify(calendarEvents));
+  }, [calendarEvents]);
 
   const cityOptions = useMemo(
     () => ["全部", ...Array.from(new Set(jobs.flatMap((job) => job.city.split(/[、,，/]/)).map((item) => item.trim()).filter(Boolean)))],
@@ -422,6 +460,21 @@ export default function OfferCatApp() {
     setApplications((current) => current.filter((item) => item.id !== id));
   }
 
+  function addCalendarEvent(event: Omit<CalendarEvent, "id" | "source">) {
+    setCalendarEvents((current) => [
+      {
+        ...event,
+        id: window.crypto?.randomUUID?.() || `${Date.now()}`,
+        source: "手动新建",
+      },
+      ...current,
+    ]);
+  }
+
+  function removeCalendarEvent(id: string) {
+    setCalendarEvents((current) => current.filter((event) => event.id !== id));
+  }
+
   function addCalendarTodo(todo: Omit<CalendarTodo, "id" | "done">) {
     setCalendarTodos((current) => [
       {
@@ -472,21 +525,6 @@ export default function OfferCatApp() {
         />
       </header>
 
-      <section className="hero">
-        <div className="hero-copy">
-          <span className="eyebrow">2027 AUTUMN RECRUITING</span>
-          <h1>把分散的秋招信息，变成自己的投递节奏。</h1>
-          <p>
-            offercat 先帮你收住信息源、岗位库和投递记录。官网数据暂时无法稳定导出时，入口先保留；
-            等抓取规则成熟后，再把它们自动整理进你的工作台。
-          </p>
-          <div className="hero-actions">
-            <button onClick={() => setActiveView("信息源")} type="button">查看信息源</button>
-            <button onClick={() => setActiveView("我的秋招")} type="button">填写投递问卷</button>
-          </div>
-        </div>
-      </section>
-
       <section className="workspace-panel">
         <div className="section-bar">
           <div>
@@ -496,7 +534,9 @@ export default function OfferCatApp() {
           <strong>
             {activeView === "我的秋招"
               ? `${activeRecords.length} 个进行中`
-              : activeView === "面试日历"
+              : activeView === "Offer日历"
+                ? `${calendarEvents.length + seedCalendarEvents.length + buildApplicationEvents(applications).length} 个日程`
+                : activeView === "Offer Todo"
                 ? `${calendarTodos.filter((todo) => !todo.done).length} 个待办`
                 : `${filteredJobs.length} 个岗位可见`}
           </strong>
@@ -582,9 +622,17 @@ export default function OfferCatApp() {
           </section>
         )}
 
-        {activeView === "面试日历" && (
+        {activeView === "Offer日历" && (
           <CalendarPlanner
             applications={applications}
+            customEvents={calendarEvents}
+            onAddEvent={addCalendarEvent}
+            onRemoveEvent={removeCalendarEvent}
+          />
+        )}
+
+        {activeView === "Offer Todo" && (
+          <OfferTodoPage
             todos={calendarTodos}
             onAddTodo={addCalendarTodo}
             onRemoveTodo={removeCalendarTodo}
@@ -598,58 +646,61 @@ export default function OfferCatApp() {
 
 function CalendarPlanner({
   applications,
-  todos,
-  onAddTodo,
-  onRemoveTodo,
-  onToggleTodo,
+  customEvents,
+  onAddEvent,
+  onRemoveEvent,
 }: {
   applications: ApplicationRecord[];
-  todos: CalendarTodo[];
-  onAddTodo: (todo: Omit<CalendarTodo, "id" | "done">) => void;
-  onRemoveTodo: (id: string) => void;
-  onToggleTodo: (id: string) => void;
+  customEvents: CalendarEvent[];
+  onAddEvent: (event: Omit<CalendarEvent, "id" | "source">) => void;
+  onRemoveEvent: (id: string) => void;
 }) {
   const today = useMemo(() => new Date(), []);
   const [visibleMonth, setVisibleMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const [selectedDate, setSelectedDate] = useState(() => toDateKey(today));
-  const [todoTitle, setTodoTitle] = useState("");
-  const [todoDue, setTodoDue] = useState(() => toDateKey(today));
-  const [todoKind, setTodoKind] = useState<CalendarEventKind>("todo");
+  const [isComposerOpen, setIsComposerOpen] = useState(false);
+  const [eventDraft, setEventDraft] = useState<Omit<CalendarEvent, "id" | "source">>(() => ({
+    ...blankCalendarEvent,
+    date: toDateKey(today),
+  }));
 
   const applicationEvents = useMemo(() => buildApplicationEvents(applications), [applications]);
-  const todoEvents = useMemo(
-    () => todos.map((todo) => ({
-      id: `calendar-${todo.id}`,
-      title: todo.title,
-      date: todo.due,
-      kind: todo.kind,
-      source: todo.done ? "已完成" : "Todo",
-    })),
-    [todos],
-  );
-  const events = useMemo(() => [...seedCalendarEvents, ...applicationEvents, ...todoEvents], [applicationEvents, todoEvents]);
+  const events = useMemo(() => [...seedCalendarEvents, ...customEvents, ...applicationEvents], [applicationEvents, customEvents]);
   const calendarDays = useMemo(() => buildCalendarDays(visibleMonth), [visibleMonth]);
   const selectedEvents = events
     .filter((event) => event.date === selectedDate)
     .sort((a, b) => (a.time || "23:59").localeCompare(b.time || "23:59"));
   const monthLabel = `${visibleMonth.getFullYear()}年${visibleMonth.getMonth() + 1}月`;
-  const openTodoCount = todos.filter((todo) => !todo.done).length;
-  const urgentTodoCount = todos.filter((todo) => !todo.done && todo.due <= toDateKey(today)).length;
+  const interviewCount = events.filter((event) => event.kind === "interview").length;
+  const deadlineCount = events.filter((event) => event.kind === "deadline" || event.kind === "offer").length;
 
   function shiftMonth(offset: number) {
     setVisibleMonth((current) => new Date(current.getFullYear(), current.getMonth() + offset, 1));
   }
 
-  function addTodo(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!todoTitle.trim()) return;
+  function openComposer(dateKey = selectedDate) {
+    setEventDraft((current) => ({
+      ...current,
+      date: dateKey,
+      title: current.title,
+    }));
+    setSelectedDate(dateKey);
+    setIsComposerOpen(true);
+  }
 
-    onAddTodo({
-      title: todoTitle.trim(),
-      due: todoDue,
-      kind: todoKind,
+  function submitEvent(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!eventDraft.title.trim()) return;
+
+    onAddEvent({
+      ...eventDraft,
+      title: eventDraft.title.trim(),
     });
-    setTodoTitle("");
+    setEventDraft({
+      ...blankCalendarEvent,
+      date: eventDraft.date,
+    });
+    setIsComposerOpen(false);
   }
 
   return (
@@ -658,12 +709,12 @@ function CalendarPlanner({
         <div className="calendar-mini-card">
           <span>Calendar</span>
           <h3>{monthLabel}</h3>
-          <p>用彩色节点标记网申、笔试、面试、跟进和 offer 截止。</p>
+          <p>这里专门管理 offer 相关日程：笔试、面试、复盘、跟进和 offer 决策。</p>
         </div>
         <div className="calendar-stats">
           <Metric label="日历节点" value={events.length} />
-          <Metric label="待办事项" value={openTodoCount} />
-          <Metric label="需要马上看" value={urgentTodoCount} />
+          <Metric label="面试节点" value={interviewCount} />
+          <Metric label="关键截止" value={deadlineCount} />
         </div>
         <div className="calendar-legend" aria-label="日历颜色说明">
           {[
@@ -686,6 +737,7 @@ function CalendarPlanner({
             <h3>{monthLabel}</h3>
           </div>
           <div className="calendar-controls">
+            <button onClick={() => openComposer()} type="button">新建日程</button>
             <button onClick={() => { setVisibleMonth(new Date(today.getFullYear(), today.getMonth(), 1)); setSelectedDate(toDateKey(today)); }} type="button">今天</button>
             <button aria-label="上个月" onClick={() => shiftMonth(-1)} type="button">‹</button>
             <button aria-label="下个月" onClick={() => shiftMonth(1)} type="button">›</button>
@@ -708,6 +760,7 @@ function CalendarPlanner({
                 ].filter(Boolean).join(" ")}
                 key={day.key}
                 onClick={() => setSelectedDate(day.key)}
+                onDoubleClick={() => openComposer(day.key)}
                 type="button"
               >
                 <span className="calendar-day-number">{day.date.getDate()}</span>
@@ -729,6 +782,7 @@ function CalendarPlanner({
           <div>
             <span>Selected day</span>
             <h3>{formatDateLabel(selectedDate)}</h3>
+            <button onClick={() => openComposer(selectedDate)} type="button">添加这天的日程</button>
           </div>
           <div className="selected-event-list">
             {selectedEvents.length === 0 ? (
@@ -736,26 +790,178 @@ function CalendarPlanner({
             ) : (
               selectedEvents.map((event) => (
                 <article className={`selected-event selected-event--${event.kind}`} key={event.id}>
-                  <span>{event.time || "全天"}</span>
+                  <span>{event.time ? `${event.time}${event.endTime ? `-${event.endTime}` : ""}` : "全天"}</span>
                   <strong>{event.title}</strong>
-                  <small>{event.source}</small>
+                  <small>{event.location || event.source}</small>
+                  {event.source === "手动新建" && (
+                    <button aria-label="删除日程" onClick={() => onRemoveEvent(event.id)} type="button">删除</button>
+                  )}
                 </article>
               ))
             )}
           </div>
         </div>
+
+        {isComposerOpen && (
+          <form className="event-composer" onSubmit={submitEvent}>
+            <div className="composer-title-row">
+              <input
+                aria-label="日程主题"
+                placeholder="添加主题"
+                value={eventDraft.title}
+                onChange={(event) => setEventDraft((current) => ({ ...current, title: event.target.value }))}
+              />
+              <button aria-label="关闭新建日程" onClick={() => setIsComposerOpen(false)} type="button">×</button>
+            </div>
+            <div className="composer-grid">
+              <label>
+                日期
+                <input
+                  type="date"
+                  value={eventDraft.date}
+                  onChange={(event) => setEventDraft((current) => ({ ...current, date: event.target.value }))}
+                />
+              </label>
+              <label>
+                开始时间
+                <input
+                  type="time"
+                  value={eventDraft.time || ""}
+                  onChange={(event) => setEventDraft((current) => ({ ...current, time: event.target.value }))}
+                />
+              </label>
+              <label>
+                结束时间
+                <input
+                  type="time"
+                  value={eventDraft.endTime || ""}
+                  onChange={(event) => setEventDraft((current) => ({ ...current, endTime: event.target.value }))}
+                />
+              </label>
+              <label>
+                类型
+                <select
+                  value={eventDraft.kind}
+                  onChange={(event) => setEventDraft((current) => ({ ...current, kind: event.target.value as CalendarEventKind }))}
+                >
+                  <option value="interview">面试</option>
+                  <option value="written">笔试/测评</option>
+                  <option value="deadline">投递截止</option>
+                  <option value="follow">跟进</option>
+                  <option value="offer">Offer</option>
+                </select>
+              </label>
+              <label>
+                地点 / 方式
+                <input
+                  placeholder="线上、线下、会议链接"
+                  value={eventDraft.location || ""}
+                  onChange={(event) => setEventDraft((current) => ({ ...current, location: event.target.value }))}
+                />
+              </label>
+              <label className="composer-wide">
+                描述
+                <textarea
+                  placeholder="补充联系人、会议链接、准备材料或复盘提醒"
+                  value={eventDraft.description || ""}
+                  onChange={(event) => setEventDraft((current) => ({ ...current, description: event.target.value }))}
+                />
+              </label>
+            </div>
+            <div className="composer-actions">
+              <button onClick={() => setIsComposerOpen(false)} type="button">取消</button>
+              <button type="submit">保存</button>
+            </div>
+          </form>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function OfferTodoPage({
+  todos,
+  onAddTodo,
+  onRemoveTodo,
+  onToggleTodo,
+}: {
+  todos: CalendarTodo[];
+  onAddTodo: (todo: Omit<CalendarTodo, "id" | "done">) => void;
+  onRemoveTodo: (id: string) => void;
+  onToggleTodo: (id: string) => void;
+}) {
+  const todayKey = toDateKey(new Date());
+  const [isAdding, setIsAdding] = useState(false);
+  const [todoDraft, setTodoDraft] = useState<Omit<CalendarTodo, "id" | "done">>({
+    title: "",
+    due: todayKey,
+    kind: "todo",
+    priority: "P1",
+    owner: "我",
+  });
+  const openTodos = todos.filter((todo) => !todo.done);
+  const overdueTodos = openTodos.filter((todo) => todo.due < todayKey);
+  const p0Todos = openTodos.filter((todo) => todo.priority === "P0");
+
+  function submitTodo(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!todoDraft.title.trim()) return;
+
+    onAddTodo({
+      ...todoDraft,
+      title: todoDraft.title.trim(),
+    });
+    setTodoDraft({
+      title: "",
+      due: todayKey,
+      kind: "todo",
+      priority: "P1",
+      owner: "我",
+    });
+    setIsAdding(false);
+  }
+
+  return (
+    <section className="offer-todo-page">
+      <div className="todo-summary-grid">
+        <Metric label="全部事项" value={todos.length} />
+        <Metric label="已完成" value={todos.filter((todo) => todo.done).length} />
+        <Metric label="P0 高优" value={p0Todos.length} />
+        <Metric label="已延期" value={overdueTodos.length} />
       </div>
 
-      <section className="todo-strip">
-        <div className="todo-strip-heading">
+      <section className="todo-table-panel">
+        <div className="todo-table-toolbar">
           <div>
-            <span>Todo & deadlines</span>
-            <h3>记录条</h3>
+            <span>Todo list</span>
+            <h3>事项明细</h3>
           </div>
-          <form className="todo-add" onSubmit={addTodo}>
-            <input aria-label="新增 todo" placeholder="新增 todo，例如：补充美团简历" value={todoTitle} onChange={(event) => setTodoTitle(event.target.value)} />
-            <input aria-label="截止日期" type="date" value={todoDue} onChange={(event) => setTodoDue(event.target.value)} />
-            <select aria-label="事项类型" value={todoKind} onChange={(event) => setTodoKind(event.target.value as CalendarEventKind)}>
+          <div className="todo-toolbar-actions">
+            <button onClick={() => setIsAdding((current) => !current)} type="button">+ 添加记录</button>
+            <button type="button">筛选</button>
+            <button type="button">排序</button>
+          </div>
+        </div>
+
+        {isAdding && (
+          <form className="todo-entry-form" onSubmit={submitTodo}>
+            <input
+              aria-label="待办事项"
+              placeholder="待办事项，例如：准备腾讯一面自我介绍"
+              value={todoDraft.title}
+              onChange={(event) => setTodoDraft((current) => ({ ...current, title: event.target.value }))}
+            />
+            <input
+              aria-label="Todo 截止日期"
+              type="date"
+              value={todoDraft.due}
+              onChange={(event) => setTodoDraft((current) => ({ ...current, due: event.target.value }))}
+            />
+            <select
+              aria-label="Todo 类型"
+              value={todoDraft.kind}
+              onChange={(event) => setTodoDraft((current) => ({ ...current, kind: event.target.value as CalendarEventKind }))}
+            >
               <option value="todo">Todo</option>
               <option value="deadline">投递截止</option>
               <option value="interview">面试</option>
@@ -763,22 +969,50 @@ function CalendarPlanner({
               <option value="follow">跟进</option>
               <option value="offer">Offer</option>
             </select>
-            <button type="submit">添加</button>
+            <select
+              aria-label="优先级"
+              value={todoDraft.priority}
+              onChange={(event) => setTodoDraft((current) => ({ ...current, priority: event.target.value as CalendarTodo["priority"] }))}
+            >
+              <option value="P0">P0-高优</option>
+              <option value="P1">P1-重要</option>
+              <option value="P2">P2-普通</option>
+              <option value="P3">P3-低优</option>
+            </select>
+            <input
+              aria-label="执行人"
+              placeholder="执行人"
+              value={todoDraft.owner}
+              onChange={(event) => setTodoDraft((current) => ({ ...current, owner: event.target.value }))}
+            />
+            <button type="submit">保存</button>
           </form>
-        </div>
-        <div className="todo-list">
+        )}
+
+        <div className="todo-data-table">
+          <div className="todo-data-head">
+            <span>待办事项</span>
+            <span>截止日期</span>
+            <span>距离截止日</span>
+            <span>是否已完成</span>
+            <span>优先级</span>
+            <span>执行人</span>
+            <span>操作</span>
+          </div>
           {todos
             .slice()
-            .sort((a, b) => a.due.localeCompare(b.due))
+            .sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority) || a.due.localeCompare(b.due))
             .map((todo) => (
-              <article className={`todo-item todo-item--${todo.kind} ${todo.done ? "todo-item--done" : ""}`} key={todo.id}>
-                <button aria-label={todo.done ? "标记为未完成" : "标记为已完成"} onClick={() => onToggleTodo(todo.id)} type="button" />
-                <div>
-                  <strong>{todo.title}</strong>
-                  <span>{formatDateLabel(todo.due)} 截止</span>
-                </div>
-                <small>{kindLabel(todo.kind)}</small>
-                <button aria-label="删除 todo" onClick={() => onRemoveTodo(todo.id)} type="button">删除</button>
+              <article className={`todo-data-row todo-data-row--${todo.kind} ${todo.done ? "todo-data-row--done" : ""}`} key={todo.id}>
+                <strong>{todo.title}</strong>
+                <span>{formatDateLabel(todo.due)}</span>
+                <span>{distanceLabel(todo.due, todayKey)}</span>
+                <button aria-label={todo.done ? "标记为未完成" : "标记为已完成"} onClick={() => onToggleTodo(todo.id)} type="button">
+                  {todo.done ? "已完成" : "未完成"}
+                </button>
+                <small className={`priority-pill priority-pill--${normalizeTodo(todo).priority.toLowerCase()}`}>{priorityLabel(normalizeTodo(todo).priority)}</small>
+                <span>{normalizeTodo(todo).owner}</span>
+                <button onClick={() => onRemoveTodo(todo.id)} type="button">删除</button>
               </article>
             ))}
         </div>
@@ -859,6 +1093,41 @@ function kindLabel(kind: CalendarEventKind) {
     offer: "Offer",
     todo: "Todo",
   }[kind];
+}
+
+function normalizeTodo(todo: CalendarTodo): CalendarTodo {
+  return {
+    ...todo,
+    kind: todo.kind || "todo",
+    priority: todo.priority || "P1",
+    owner: todo.owner || "我",
+  };
+}
+
+function priorityLabel(priority: CalendarTodo["priority"]) {
+  return {
+    P0: "P0-高优",
+    P1: "P1-重要",
+    P2: "P2-普通",
+    P3: "P3-低优",
+  }[priority];
+}
+
+function priorityRank(priority: CalendarTodo["priority"]) {
+  return {
+    P0: 0,
+    P1: 1,
+    P2: 2,
+    P3: 3,
+  }[priority];
+}
+
+function distanceLabel(due: string, today: string) {
+  const dayMs = 24 * 60 * 60 * 1000;
+  const diff = Math.round((new Date(`${due}T00:00:00`).getTime() - new Date(`${today}T00:00:00`).getTime()) / dayMs);
+  if (diff < 0) return `已延期 ${Math.abs(diff)} 天`;
+  if (diff === 0) return "今天截止";
+  return `还有 ${diff} 天`;
 }
 
 function Metric({ label, value }: { label: string; value: number }) {
