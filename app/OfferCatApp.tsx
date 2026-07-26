@@ -1054,7 +1054,10 @@ function ScheduleEventForm({
           required
           placeholder="例如：腾讯笔试、论文中期汇报"
           value={draft.title}
-          onChange={(event) => onChange((current) => ({ ...current, title: event.target.value }))}
+          onChange={(event) => {
+            const value = event.currentTarget.value;
+            onChange((current) => ({ ...current, title: value }));
+          }}
         />
       </label>
 
@@ -1083,7 +1086,10 @@ function ScheduleEventForm({
           <select
             name="eventType"
             value={draft.eventType}
-            onChange={(event) => onChange((current) => ({ ...current, eventType: event.target.value as CalendarEventType }))}
+            onChange={(event) => {
+              const value = event.currentTarget.value as CalendarEventType;
+              onChange((current) => ({ ...current, eventType: value }));
+            }}
           >
             {eventTypeOptions.map((option) => (
               <option key={option.value} value={option.value}>{option.label}</option>
@@ -1097,8 +1103,14 @@ function ScheduleEventForm({
             required
             type="date"
             value={draft.date}
-            onInput={(event) => onChange((current) => ({ ...current, date: event.currentTarget.value }))}
-            onChange={(event) => onChange((current) => ({ ...current, date: event.target.value }))}
+            onInput={(event) => {
+              const value = event.currentTarget.value;
+              onChange((current) => ({ ...current, date: value }));
+            }}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              onChange((current) => ({ ...current, date: value }));
+            }}
           />
         </label>
         <label className="composer-field">
@@ -1108,8 +1120,14 @@ function ScheduleEventForm({
             required
             type="time"
             value={draft.startTime}
-            onInput={(event) => onChange((current) => ({ ...current, startTime: event.currentTarget.value }))}
-            onChange={(event) => onChange((current) => ({ ...current, startTime: event.target.value }))}
+            onInput={(event) => {
+              const value = event.currentTarget.value;
+              onChange((current) => ({ ...current, startTime: value }));
+            }}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              onChange((current) => ({ ...current, startTime: value }));
+            }}
           />
         </label>
         <label className="composer-field">
@@ -1118,8 +1136,14 @@ function ScheduleEventForm({
             name="endTime"
             type="time"
             value={draft.endTime || ""}
-            onInput={(event) => onChange((current) => ({ ...current, endTime: event.currentTarget.value }))}
-            onChange={(event) => onChange((current) => ({ ...current, endTime: event.target.value }))}
+            onInput={(event) => {
+              const value = event.currentTarget.value;
+              onChange((current) => ({ ...current, endTime: value }));
+            }}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              onChange((current) => ({ ...current, endTime: value }));
+            }}
           />
         </label>
         <label className="composer-field composer-field--wide">
@@ -1128,7 +1152,10 @@ function ScheduleEventForm({
             name="location"
             placeholder="线上、线下、会议链接、具体地址"
             value={draft.location || ""}
-            onChange={(event) => onChange((current) => ({ ...current, location: event.target.value }))}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              onChange((current) => ({ ...current, location: value }));
+            }}
           />
         </label>
         <label className="composer-field composer-field--wide">
@@ -1137,7 +1164,10 @@ function ScheduleEventForm({
             name="description"
             placeholder="联系人、准备材料、复盘提醒"
             value={draft.description || ""}
-            onChange={(event) => onChange((current) => ({ ...current, description: event.target.value }))}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              onChange((current) => ({ ...current, description: value }));
+            }}
           />
         </label>
       </div>
