@@ -66,18 +66,36 @@ type ApplicationRecord = {
 };
 
 type CalendarEventKind = "deadline" | "interview" | "written" | "follow" | "offer" | "todo";
+type ScheduleCategoryValue = "student_work" | "job_search" | "thesis" | "study" | "personal";
+type CalendarEventType =
+  | "deadline"
+  | "written"
+  | "interview"
+  | "follow"
+  | "offer"
+  | "meeting"
+  | "course"
+  | "thesis"
+  | "todo"
+  | "other";
 
 type CalendarEvent = {
   id: string;
   title: string;
   date: string;
-  time?: string;
+  startTime: string;
   endTime?: string;
-  kind: CalendarEventKind;
-  source: string;
+  category: ScheduleCategoryValue;
+  eventType: CalendarEventType;
+  source?: string;
   location?: string;
   description?: string;
+  createdAt?: string;
+  updatedAt?: string;
 };
+
+type CalendarEventDraft = Omit<CalendarEvent, "id" | "source" | "createdAt" | "updatedAt">;
+type CalendarPanelMode = "list" | "create" | "detail" | "edit";
 
 type CalendarTodo = {
   id: string;
@@ -240,6 +258,32 @@ const calendarTodoStorageKey = "offercat-calendar-todos-v1";
 const calendarEventStorageKey = "offercat-calendar-events-v1";
 const weekdayLabels = ["日", "一", "二", "三", "四", "五", "六"];
 
+const scheduleCategories: Array<{
+  value: ScheduleCategoryValue;
+  label: string;
+  color: "green" | "yellow" | "blue" | "purple" | "gray";
+  description: string;
+}> = [
+  { value: "student_work", label: "学工事项", color: "green", description: "学生工作、学院事务、会议沟通" },
+  { value: "job_search", label: "求职事项", color: "yellow", description: "投递、笔试、面试、offer 决策" },
+  { value: "thesis", label: "论文事项", color: "blue", description: "论文节点、数据、导师沟通" },
+  { value: "study", label: "课程学习", color: "purple", description: "课程、考试、学习计划" },
+  { value: "personal", label: "个人事项", color: "gray", description: "个人安排和其他提醒" },
+];
+
+const eventTypeOptions: Array<{ value: CalendarEventType; label: string }> = [
+  { value: "deadline", label: "投递截止" },
+  { value: "written", label: "笔试/测评" },
+  { value: "interview", label: "面试" },
+  { value: "follow", label: "跟进" },
+  { value: "offer", label: "Offer" },
+  { value: "meeting", label: "会议" },
+  { value: "course", label: "课程" },
+  { value: "thesis", label: "论文节点" },
+  { value: "todo", label: "Todo" },
+  { value: "other", label: "其他" },
+];
+
 const defaultCalendarTodos: CalendarTodo[] = [
   {
     id: "todo-resume-baidu",
@@ -275,42 +319,47 @@ const seedCalendarEvents: CalendarEvent[] = [
     id: "seed-baidu-follow",
     title: "百度官网入口复查",
     date: "2026-07-27",
-    time: "10:00",
-    kind: "follow",
+    startTime: "10:00",
+    category: "job_search",
+    eventType: "follow",
     source: "官网巡检",
   },
   {
     id: "seed-tencent-written",
     title: "腾讯笔试准备",
     date: "2026-07-29",
-    time: "19:30",
-    kind: "written",
+    startTime: "19:30",
+    category: "job_search",
+    eventType: "written",
     source: "我的任务",
   },
   {
     id: "seed-bytedance-interview",
     title: "字节一面复盘",
     date: "2026-07-31",
-    time: "15:00",
-    kind: "interview",
+    startTime: "15:00",
+    category: "job_search",
+    eventType: "interview",
     source: "面试",
   },
   {
     id: "seed-offer-decision",
     title: "offer 决策提醒",
     date: "2026-08-01",
-    time: "18:00",
-    kind: "offer",
+    startTime: "18:00",
+    category: "job_search",
+    eventType: "offer",
     source: "Offer",
   },
 ];
 
-const blankCalendarEvent: Omit<CalendarEvent, "id" | "source"> = {
+const blankCalendarEvent: CalendarEventDraft = {
   title: "",
   date: "2026-07-26",
-  time: "13:00",
+  startTime: "13:00",
   endTime: "13:30",
-  kind: "interview",
+  category: "job_search",
+  eventType: "interview",
   location: "",
   description: "",
 };
@@ -323,51 +372,22 @@ export default function OfferCatApp() {
   const [batch, setBatch] = useState("全部");
   const [tag, setTag] = useState("全部");
   const [form, setForm] = useState<ApplicationRecord>(blankApplication);
-  const [applications, setApplications] = useState<ApplicationRecord[]>([]);
+  const [applications, setApplications] = useState<ApplicationRecord[]>(() => readJsonStorage(applicationStorageKey, []));
   const [formMessage, setFormMessage] = useState("");
-  const [calendarTodos, setCalendarTodos] = useState<CalendarTodo[]>(defaultCalendarTodos);
-  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
-
-  useEffect(() => {
-    const saved = window.localStorage.getItem(applicationStorageKey);
-    if (!saved) return;
-
-    try {
-      setApplications(JSON.parse(saved));
-    } catch {
-      window.localStorage.removeItem(applicationStorageKey);
-    }
-  }, []);
+  const [calendarTodos, setCalendarTodos] = useState<CalendarTodo[]>(() =>
+    readJsonStorage(calendarTodoStorageKey, defaultCalendarTodos, (items) => items.map(normalizeTodo)),
+  );
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>(() =>
+    readJsonStorage(calendarEventStorageKey, [], (items) => items.map(normalizeCalendarEvent)),
+  );
 
   useEffect(() => {
     window.localStorage.setItem(applicationStorageKey, JSON.stringify(applications));
   }, [applications]);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(calendarTodoStorageKey);
-    if (!saved) return;
-
-    try {
-      setCalendarTodos(JSON.parse(saved).map(normalizeTodo));
-    } catch {
-      window.localStorage.removeItem(calendarTodoStorageKey);
-    }
-  }, []);
-
-  useEffect(() => {
     window.localStorage.setItem(calendarTodoStorageKey, JSON.stringify(calendarTodos));
   }, [calendarTodos]);
-
-  useEffect(() => {
-    const saved = window.localStorage.getItem(calendarEventStorageKey);
-    if (!saved) return;
-
-    try {
-      setCalendarEvents(JSON.parse(saved));
-    } catch {
-      window.localStorage.removeItem(calendarEventStorageKey);
-    }
-  }, []);
 
   useEffect(() => {
     window.localStorage.setItem(calendarEventStorageKey, JSON.stringify(calendarEvents));
@@ -460,15 +480,33 @@ export default function OfferCatApp() {
     setApplications((current) => current.filter((item) => item.id !== id));
   }
 
-  function addCalendarEvent(event: Omit<CalendarEvent, "id" | "source">) {
+  function addCalendarEvent(event: CalendarEventDraft) {
+    const timestamp = new Date().toISOString();
     setCalendarEvents((current) => [
       {
         ...event,
         id: window.crypto?.randomUUID?.() || `${Date.now()}`,
         source: "手动新建",
+        createdAt: timestamp,
+        updatedAt: timestamp,
       },
       ...current,
     ]);
+  }
+
+  function updateCalendarEvent(id: string, event: CalendarEventDraft) {
+    setCalendarEvents((current) =>
+      current.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              ...event,
+              source: item.source || "手动新建",
+              updatedAt: new Date().toISOString(),
+            }
+          : item,
+      ),
+    );
   }
 
   function removeCalendarEvent(id: string) {
@@ -628,6 +666,7 @@ export default function OfferCatApp() {
             customEvents={calendarEvents}
             onAddEvent={addCalendarEvent}
             onRemoveEvent={removeCalendarEvent}
+            onUpdateEvent={updateCalendarEvent}
           />
         )}
 
@@ -649,83 +688,147 @@ function CalendarPlanner({
   customEvents,
   onAddEvent,
   onRemoveEvent,
+  onUpdateEvent,
 }: {
   applications: ApplicationRecord[];
   customEvents: CalendarEvent[];
-  onAddEvent: (event: Omit<CalendarEvent, "id" | "source">) => void;
+  onAddEvent: (event: CalendarEventDraft) => void;
   onRemoveEvent: (id: string) => void;
+  onUpdateEvent: (id: string, event: CalendarEventDraft) => void;
 }) {
   const today = useMemo(() => new Date(), []);
   const [visibleMonth, setVisibleMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const [selectedDate, setSelectedDate] = useState(() => toDateKey(today));
-  const [isComposerOpen, setIsComposerOpen] = useState(false);
-  const [eventDraft, setEventDraft] = useState<Omit<CalendarEvent, "id" | "source">>(() => ({
+  const [panelMode, setPanelMode] = useState<CalendarPanelMode>("list");
+  const [activeEventId, setActiveEventId] = useState<string | null>(null);
+  const [formError, setFormError] = useState("");
+  const [eventDraft, setEventDraft] = useState<CalendarEventDraft>(() => ({
     ...blankCalendarEvent,
     date: toDateKey(today),
   }));
 
   const applicationEvents = useMemo(() => buildApplicationEvents(applications), [applications]);
-  const events = useMemo(() => [...seedCalendarEvents, ...customEvents, ...applicationEvents], [applicationEvents, customEvents]);
+  const events = useMemo(
+    () => [...seedCalendarEvents, ...customEvents, ...applicationEvents].map(normalizeCalendarEvent),
+    [applicationEvents, customEvents],
+  );
   const calendarDays = useMemo(() => buildCalendarDays(visibleMonth), [visibleMonth]);
-  const selectedEvents = events
-    .filter((event) => event.date === selectedDate)
-    .sort((a, b) => (a.time || "23:59").localeCompare(b.time || "23:59"));
+  const selectedEvents = sortCalendarEvents(events.filter((event) => event.date === selectedDate));
+  const activeEvent = activeEventId ? events.find((event) => event.id === activeEventId) : null;
   const monthLabel = `${visibleMonth.getFullYear()}年${visibleMonth.getMonth() + 1}月`;
-  const interviewCount = events.filter((event) => event.kind === "interview").length;
-  const deadlineCount = events.filter((event) => event.kind === "deadline" || event.kind === "offer").length;
+  const interviewCount = events.filter((event) => event.eventType === "interview").length;
+  const deadlineCount = events.filter((event) => event.eventType === "deadline" || event.eventType === "offer").length;
+  const categoryStats = scheduleCategories.map((category) => ({
+    ...category,
+    count: events.filter((event) => event.category === category.value).length,
+  }));
 
   function shiftMonth(offset: number) {
     setVisibleMonth((current) => new Date(current.getFullYear(), current.getMonth() + offset, 1));
   }
 
   function openComposer(dateKey = selectedDate) {
-    setEventDraft((current) => ({
-      ...current,
-      date: dateKey,
-      title: current.title,
-    }));
     setSelectedDate(dateKey);
-    setIsComposerOpen(true);
+    setActiveEventId(null);
+    setFormError("");
+    setEventDraft({
+      ...blankCalendarEvent,
+      date: dateKey,
+    });
+    setPanelMode("create");
+  }
+
+  function selectDay(dateKey: string) {
+    setSelectedDate(dateKey);
+    setActiveEventId(null);
+    setPanelMode("list");
+    setFormError("");
+  }
+
+  function goToday() {
+    const todayKey = toDateKey(today);
+    setVisibleMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+    selectDay(todayKey);
+  }
+
+  function showEventDetail(event: CalendarEvent) {
+    setSelectedDate(event.date);
+    setActiveEventId(event.id);
+    setPanelMode("detail");
+    setFormError("");
+  }
+
+  function startEditEvent(event: CalendarEvent) {
+    setActiveEventId(event.id);
+    setEventDraft(calendarEventToDraft(event));
+    setPanelMode("edit");
+    setFormError("");
+  }
+
+  function closePanel() {
+    setPanelMode("list");
+    setActiveEventId(null);
+    setFormError("");
   }
 
   function submitEvent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!eventDraft.title.trim()) return;
+    const submittedDraft = calendarDraftFromForm(event.currentTarget, eventDraft);
+    const validationError = validateEventDraft(submittedDraft);
+    if (validationError) {
+      setFormError(validationError);
+      return;
+    }
 
-    onAddEvent({
-      ...eventDraft,
-      title: eventDraft.title.trim(),
-    });
+    const nextEvent = {
+      ...submittedDraft,
+      title: submittedDraft.title.trim(),
+      location: submittedDraft.location?.trim() || "",
+      description: submittedDraft.description?.trim() || "",
+    };
+
+    if (panelMode === "edit" && activeEventId) {
+      onUpdateEvent(activeEventId, nextEvent);
+    } else {
+      onAddEvent(nextEvent);
+    }
+
+    setSelectedDate(submittedDraft.date);
     setEventDraft({
       ...blankCalendarEvent,
-      date: eventDraft.date,
+      date: submittedDraft.date,
     });
-    setIsComposerOpen(false);
+    setPanelMode("list");
+    setActiveEventId(null);
+    setFormError("");
+  }
+
+  function deleteActiveEvent(event: CalendarEvent) {
+    setSelectedDate(event.date);
+    onRemoveEvent(event.id);
+    closePanel();
   }
 
   return (
     <section className="calendar-planner">
       <div className="calendar-sidebar">
         <div className="calendar-mini-card">
-          <span>Calendar</span>
+          <span>Offer Calendar</span>
           <h3>{monthLabel}</h3>
-          <p>这里专门管理 offer 相关日程：笔试、面试、复盘、跟进和 offer 决策。</p>
+          <p>把求职、论文、学工、课程和个人节点放进同一张月历，用颜色看清每天的重心。</p>
         </div>
         <div className="calendar-stats">
           <Metric label="日历节点" value={events.length} />
           <Metric label="面试节点" value={interviewCount} />
           <Metric label="关键截止" value={deadlineCount} />
         </div>
-        <div className="calendar-legend" aria-label="日历颜色说明">
-          {[
-            ["deadline", "投递截止"],
-            ["interview", "面试"],
-            ["written", "笔试/测评"],
-            ["follow", "跟进"],
-            ["offer", "Offer"],
-            ["todo", "Todo"],
-          ].map(([kind, label]) => (
-            <span className={`legend-dot legend-dot--${kind}`} key={kind}>{label}</span>
+        <div className="calendar-legend" aria-label="所属领域颜色说明">
+          <strong>所属领域</strong>
+          {categoryStats.map((category) => (
+            <span className={`legend-dot schedule-category--${category.value}`} key={category.value}>
+              {category.label}
+              <small>{category.count}</small>
+            </span>
           ))}
         </div>
       </div>
@@ -737,8 +840,8 @@ function CalendarPlanner({
             <h3>{monthLabel}</h3>
           </div>
           <div className="calendar-controls">
-            <button onClick={() => openComposer()} type="button">新建日程</button>
-            <button onClick={() => { setVisibleMonth(new Date(today.getFullYear(), today.getMonth(), 1)); setSelectedDate(toDateKey(today)); }} type="button">今天</button>
+            <button onClick={() => openComposer(selectedDate)} type="button">新建日程</button>
+            <button onClick={goToday} type="button">今天</button>
             <button aria-label="上个月" onClick={() => shiftMonth(-1)} type="button">‹</button>
             <button aria-label="下个月" onClick={() => shiftMonth(1)} type="button">›</button>
           </div>
@@ -749,7 +852,7 @@ function CalendarPlanner({
             <div className="calendar-weekday" key={day}>周{day}</div>
           ))}
           {calendarDays.map((day) => {
-            const dayEvents = events.filter((event) => event.date === day.key);
+            const dayEvents = sortCalendarEvents(events.filter((event) => event.date === day.key));
             return (
               <button
                 className={[
@@ -759,123 +862,292 @@ function CalendarPlanner({
                   day.key === toDateKey(today) ? "calendar-day--today" : "",
                 ].filter(Boolean).join(" ")}
                 key={day.key}
-                onClick={() => setSelectedDate(day.key)}
+                onClick={() => selectDay(day.key)}
                 onDoubleClick={() => openComposer(day.key)}
                 type="button"
               >
                 <span className="calendar-day-number">{day.date.getDate()}</span>
                 <div className="calendar-events">
                   {dayEvents.slice(0, 3).map((event) => (
-                    <span className={`calendar-event calendar-event--${event.kind}`} key={event.id}>
-                      {event.time && <i>{event.time}</i>}
+                    <span className={`calendar-event schedule-category--${event.category}`} key={event.id}>
+                      {event.startTime && <i>{event.startTime}</i>}
                       {event.title}
                     </span>
                   ))}
-                  {dayEvents.length > 3 && <span className="calendar-more">+{dayEvents.length - 3}</span>}
+                  {dayEvents.length > 3 && <span className="calendar-more">+{dayEvents.length - 3} 项</span>}
                 </div>
               </button>
             );
           })}
         </div>
+      </div>
 
-        <div className="selected-day-panel">
-          <div>
-            <span>Selected day</span>
-            <h3>{formatDateLabel(selectedDate)}</h3>
-            <button onClick={() => openComposer(selectedDate)} type="button">添加这天的日程</button>
-          </div>
-          <div className="selected-event-list">
-            {selectedEvents.length === 0 ? (
-              <p>这一天暂时没有节点，可以把它留给复盘和补投。</p>
-            ) : (
-              selectedEvents.map((event) => (
-                <article className={`selected-event selected-event--${event.kind}`} key={event.id}>
-                  <span>{event.time ? `${event.time}${event.endTime ? `-${event.endTime}` : ""}` : "全天"}</span>
-                  <strong>{event.title}</strong>
-                  <small>{event.location || event.source}</small>
-                  {event.source === "手动新建" && (
-                    <button aria-label="删除日程" onClick={() => onRemoveEvent(event.id)} type="button">删除</button>
-                  )}
-                </article>
-              ))
-            )}
-          </div>
+      <aside className="calendar-detail-panel">
+        {panelMode === "create" || panelMode === "edit" ? (
+          <ScheduleEventForm
+            draft={eventDraft}
+            error={formError}
+            mode={panelMode}
+            onCancel={closePanel}
+            onChange={setEventDraft}
+            onSubmit={submitEvent}
+          />
+        ) : panelMode === "detail" && activeEvent ? (
+          <ScheduleEventDetail
+            event={activeEvent}
+            onBack={closePanel}
+            onDelete={activeEvent.source === "手动新建" ? () => deleteActiveEvent(activeEvent) : undefined}
+            onEdit={activeEvent.source === "手动新建" ? () => startEditEvent(activeEvent) : undefined}
+          />
+        ) : (
+          <SelectedDayEvents
+            events={selectedEvents}
+            selectedDate={selectedDate}
+            onAdd={() => openComposer(selectedDate)}
+            onSelect={showEventDetail}
+          />
+        )}
+      </aside>
+    </section>
+  );
+}
+
+function SelectedDayEvents({
+  events,
+  selectedDate,
+  onAdd,
+  onSelect,
+}: {
+  events: CalendarEvent[];
+  selectedDate: string;
+  onAdd: () => void;
+  onSelect: (event: CalendarEvent) => void;
+}) {
+  return (
+    <div className="selected-day-panel">
+      <div className="panel-title-row">
+        <div>
+          <span>Selected Day</span>
+          <h3>{formatDateLabel(selectedDate)}的日程</h3>
         </div>
-
-        {isComposerOpen && (
-          <form className="event-composer" onSubmit={submitEvent}>
-            <div className="composer-title-row">
-              <input
-                aria-label="日程主题"
-                placeholder="添加主题"
-                value={eventDraft.title}
-                onChange={(event) => setEventDraft((current) => ({ ...current, title: event.target.value }))}
-              />
-              <button aria-label="关闭新建日程" onClick={() => setIsComposerOpen(false)} type="button">×</button>
-            </div>
-            <div className="composer-grid">
-              <label>
-                日期
-                <input
-                  type="date"
-                  value={eventDraft.date}
-                  onChange={(event) => setEventDraft((current) => ({ ...current, date: event.target.value }))}
-                />
-              </label>
-              <label>
-                开始时间
-                <input
-                  type="time"
-                  value={eventDraft.time || ""}
-                  onChange={(event) => setEventDraft((current) => ({ ...current, time: event.target.value }))}
-                />
-              </label>
-              <label>
-                结束时间
-                <input
-                  type="time"
-                  value={eventDraft.endTime || ""}
-                  onChange={(event) => setEventDraft((current) => ({ ...current, endTime: event.target.value }))}
-                />
-              </label>
-              <label>
-                类型
-                <select
-                  value={eventDraft.kind}
-                  onChange={(event) => setEventDraft((current) => ({ ...current, kind: event.target.value as CalendarEventKind }))}
-                >
-                  <option value="interview">面试</option>
-                  <option value="written">笔试/测评</option>
-                  <option value="deadline">投递截止</option>
-                  <option value="follow">跟进</option>
-                  <option value="offer">Offer</option>
-                </select>
-              </label>
-              <label>
-                地点 / 方式
-                <input
-                  placeholder="线上、线下、会议链接"
-                  value={eventDraft.location || ""}
-                  onChange={(event) => setEventDraft((current) => ({ ...current, location: event.target.value }))}
-                />
-              </label>
-              <label className="composer-wide">
-                描述
-                <textarea
-                  placeholder="补充联系人、会议链接、准备材料或复盘提醒"
-                  value={eventDraft.description || ""}
-                  onChange={(event) => setEventDraft((current) => ({ ...current, description: event.target.value }))}
-                />
-              </label>
-            </div>
-            <div className="composer-actions">
-              <button onClick={() => setIsComposerOpen(false)} type="button">取消</button>
-              <button type="submit">保存</button>
-            </div>
-          </form>
+        <button onClick={onAdd} type="button">添加日程</button>
+      </div>
+      <div className="selected-event-list">
+        {events.length === 0 ? (
+          <div className="calendar-empty-state">
+            <strong>当天暂无日程</strong>
+            <p>可以把笔试、面试、论文节点或学工会议放到这一天。</p>
+            <button onClick={onAdd} type="button">添加日程</button>
+          </div>
+        ) : (
+          events.map((event) => {
+            const category = getScheduleCategory(event.category);
+            return (
+              <button
+                className={`selected-event schedule-category--${event.category}`}
+                key={event.id}
+                onClick={() => onSelect(event)}
+                type="button"
+              >
+                <span>{event.startTime || "全天"}</span>
+                <strong>{event.title}</strong>
+                <small>{category.label} · {eventTypeLabel(event.eventType)}</small>
+                <em>{event.location || event.source || "未填写地点"}</em>
+              </button>
+            );
+          })
         )}
       </div>
-    </section>
+    </div>
+  );
+}
+
+function ScheduleEventDetail({
+  event,
+  onBack,
+  onDelete,
+  onEdit,
+}: {
+  event: CalendarEvent;
+  onBack: () => void;
+  onDelete?: () => void;
+  onEdit?: () => void;
+}) {
+  const category = getScheduleCategory(event.category);
+
+  return (
+    <div className="schedule-detail-view">
+      <div className="panel-title-row">
+        <div>
+          <span>日程详情</span>
+          <h3>{event.title}</h3>
+        </div>
+        <button onClick={onBack} type="button">返回</button>
+      </div>
+
+      <dl className={`schedule-detail-card schedule-category--${event.category}`}>
+        <div>
+          <dt>日期时间</dt>
+          <dd>{formatDateLabel(event.date)} {event.startTime || "全天"}{event.endTime ? ` - ${event.endTime}` : ""}</dd>
+        </div>
+        <div>
+          <dt>所属领域</dt>
+          <dd><span className={`category-chip schedule-category--${event.category}`}>{category.label}</span></dd>
+        </div>
+        <div>
+          <dt>日程类型</dt>
+          <dd>{eventTypeLabel(event.eventType)}</dd>
+        </div>
+        <div>
+          <dt>地点/方式</dt>
+          <dd>{event.location || "未填写"}</dd>
+        </div>
+        <div>
+          <dt>备注</dt>
+          <dd>{event.description || "暂无备注"}</dd>
+        </div>
+        {event.source && (
+          <div>
+            <dt>来源</dt>
+            <dd>{event.source}</dd>
+          </div>
+        )}
+      </dl>
+
+      <div className="panel-actions">
+        {onEdit ? <button className="secondary-button" onClick={onEdit} type="button">编辑</button> : <small>自动生成日程暂不支持直接编辑。</small>}
+        {onDelete && <button className="danger-button" onClick={onDelete} type="button">删除</button>}
+      </div>
+    </div>
+  );
+}
+
+function ScheduleEventForm({
+  draft,
+  error,
+  mode,
+  onCancel,
+  onChange,
+  onSubmit,
+}: {
+  draft: CalendarEventDraft;
+  error: string;
+  mode: "create" | "edit";
+  onCancel: () => void;
+  onChange: (draft: CalendarEventDraft | ((current: CalendarEventDraft) => CalendarEventDraft)) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <form className="event-composer" onSubmit={onSubmit}>
+      <div className="panel-title-row">
+        <div>
+          <span>{mode === "edit" ? "编辑日程" : "新增日程"}</span>
+          <h3>{mode === "edit" ? "调整日程信息" : "创建新的日历节点"}</h3>
+        </div>
+        <button onClick={onCancel} type="button">关闭</button>
+      </div>
+
+      <label className="composer-field composer-field--wide">
+        日程标题
+        <input
+          name="title"
+          required
+          placeholder="例如：腾讯笔试、论文中期汇报"
+          value={draft.title}
+          onChange={(event) => onChange((current) => ({ ...current, title: event.target.value }))}
+        />
+      </label>
+
+      <fieldset className="category-picker">
+        <legend>所属领域</legend>
+        <div>
+          {scheduleCategories.map((category) => (
+            <label className={`category-option schedule-category--${category.value}`} key={category.value}>
+              <input
+                checked={draft.category === category.value}
+                name="category"
+                onChange={() => onChange((current) => ({ ...current, category: category.value }))}
+                type="radio"
+                value={category.value}
+              />
+              <span>{category.label}</span>
+              <small>{category.description}</small>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      <div className="composer-grid">
+        <label className="composer-field">
+          日程类型
+          <select
+            name="eventType"
+            value={draft.eventType}
+            onChange={(event) => onChange((current) => ({ ...current, eventType: event.target.value as CalendarEventType }))}
+          >
+            {eventTypeOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </label>
+        <label className="composer-field">
+          日期
+          <input
+            name="date"
+            required
+            type="date"
+            value={draft.date}
+            onInput={(event) => onChange((current) => ({ ...current, date: event.currentTarget.value }))}
+            onChange={(event) => onChange((current) => ({ ...current, date: event.target.value }))}
+          />
+        </label>
+        <label className="composer-field">
+          开始时间
+          <input
+            name="startTime"
+            required
+            type="time"
+            value={draft.startTime}
+            onInput={(event) => onChange((current) => ({ ...current, startTime: event.currentTarget.value }))}
+            onChange={(event) => onChange((current) => ({ ...current, startTime: event.target.value }))}
+          />
+        </label>
+        <label className="composer-field">
+          结束时间
+          <input
+            name="endTime"
+            type="time"
+            value={draft.endTime || ""}
+            onInput={(event) => onChange((current) => ({ ...current, endTime: event.currentTarget.value }))}
+            onChange={(event) => onChange((current) => ({ ...current, endTime: event.target.value }))}
+          />
+        </label>
+        <label className="composer-field composer-field--wide">
+          地点 / 方式
+          <input
+            name="location"
+            placeholder="线上、线下、会议链接、具体地址"
+            value={draft.location || ""}
+            onChange={(event) => onChange((current) => ({ ...current, location: event.target.value }))}
+          />
+        </label>
+        <label className="composer-field composer-field--wide">
+          描述或备注
+          <textarea
+            name="description"
+            placeholder="联系人、准备材料、复盘提醒"
+            value={draft.description || ""}
+            onChange={(event) => onChange((current) => ({ ...current, description: event.target.value }))}
+          />
+        </label>
+      </div>
+
+      {error && <p className="form-error">{error}</p>}
+      <div className="composer-actions">
+        <button onClick={onCancel} type="button">取消</button>
+        <button type="submit">保存</button>
+      </div>
+    </form>
   );
 }
 
@@ -1029,8 +1301,9 @@ function buildApplicationEvents(applications: ApplicationRecord[]): CalendarEven
         id: `${record.id}-next`,
         title: `${record.company} · ${record.nextAction || record.role}`,
         date: record.nextDeadline.slice(0, 10),
-        time: record.nextDeadline.slice(11, 16) || undefined,
-        kind: record.interview !== "未开始" ? "interview" : "follow",
+        startTime: record.nextDeadline.slice(11, 16) || "09:00",
+        category: "job_search",
+        eventType: record.interview !== "未开始" ? "interview" : "follow",
         source: "我的秋招",
       });
     }
@@ -1039,7 +1312,9 @@ function buildApplicationEvents(applications: ApplicationRecord[]): CalendarEven
         id: `${record.id}-offer`,
         title: `${record.company} offer 决策`,
         date: record.offerDeadline,
-        kind: "offer",
+        startTime: "18:00",
+        category: "job_search",
+        eventType: "offer",
         source: "Offer",
       });
     }
@@ -1048,7 +1323,9 @@ function buildApplicationEvents(applications: ApplicationRecord[]): CalendarEven
         id: `${record.id}-apply`,
         title: `${record.company} 已投递`,
         date: record.applyDate,
-        kind: "todo",
+        startTime: "09:00",
+        category: "job_search",
+        eventType: "todo",
         source: record.channel,
       });
     }
@@ -1084,15 +1361,110 @@ function formatDateLabel(dateKey: string) {
   return `${year}年${Number(month)}月${Number(day)}日`;
 }
 
-function kindLabel(kind: CalendarEventKind) {
+function getScheduleCategory(category: ScheduleCategoryValue) {
+  return scheduleCategories.find((item) => item.value === category) || scheduleCategories[1];
+}
+
+function eventTypeLabel(eventType: CalendarEventType) {
+  return eventTypeOptions.find((option) => option.value === eventType)?.label || "其他";
+}
+
+function normalizeCalendarEvent(event: Partial<CalendarEvent> & { kind?: CalendarEventKind; time?: string }): CalendarEvent {
+  const legacyKind = event.kind || "todo";
+  const eventType = normalizeEventType(event.eventType || legacyKind);
+  const category = normalizeCategory(event.category || categoryFromLegacyKind(legacyKind));
+
   return {
-    deadline: "投递截止",
-    interview: "面试",
-    written: "笔试/测评",
-    follow: "跟进",
-    offer: "Offer",
-    todo: "Todo",
-  }[kind];
+    id: event.id || `${event.title || "event"}-${event.date || Date.now()}`,
+    title: event.title || "未命名日程",
+    date: event.date || toDateKey(new Date()),
+    startTime: event.startTime || event.time || "09:00",
+    endTime: event.endTime || "",
+    category,
+    eventType,
+    source: event.source,
+    location: event.location || "",
+    description: event.description || "",
+    createdAt: event.createdAt,
+    updatedAt: event.updatedAt,
+  };
+}
+
+function normalizeCategory(category: string): ScheduleCategoryValue {
+  if (scheduleCategories.some((item) => item.value === category)) return category as ScheduleCategoryValue;
+  return "job_search";
+}
+
+function normalizeEventType(eventType: string): CalendarEventType {
+  if (eventTypeOptions.some((option) => option.value === eventType)) return eventType as CalendarEventType;
+  return "other";
+}
+
+function categoryFromLegacyKind(kind: CalendarEventKind): ScheduleCategoryValue {
+  if (kind === "todo") return "personal";
+  return "job_search";
+}
+
+function calendarEventToDraft(event: CalendarEvent): CalendarEventDraft {
+  return {
+    title: event.title,
+    date: event.date,
+    startTime: event.startTime,
+    endTime: event.endTime || "",
+    category: event.category,
+    eventType: event.eventType,
+    location: event.location || "",
+    description: event.description || "",
+  };
+}
+
+function validateEventDraft(draft: CalendarEventDraft) {
+  if (!draft.title.trim()) return "请先填写日程标题。";
+  if (!draft.category) return "请选择所属领域。";
+  if (!draft.eventType) return "请选择日程类型。";
+  if (!draft.date) return "请选择日期。";
+  if (!draft.startTime) return "请选择开始时间。";
+  if (draft.endTime && draft.endTime <= draft.startTime) return "结束时间需要晚于开始时间。";
+  return "";
+}
+
+function calendarDraftFromForm(form: HTMLFormElement, fallback: CalendarEventDraft): CalendarEventDraft {
+  const formData = new FormData(form);
+  const getValue = (key: string) => String(formData.get(key) || "");
+
+  return {
+    title: getValue("title") || fallback.title,
+    date: getValue("date") || fallback.date,
+    startTime: getValue("startTime") || fallback.startTime,
+    endTime: getValue("endTime"),
+    category: normalizeCategory(getValue("category") || fallback.category),
+    eventType: normalizeEventType(getValue("eventType") || fallback.eventType),
+    location: getValue("location"),
+    description: getValue("description"),
+  };
+}
+
+function sortCalendarEvents(events: CalendarEvent[]) {
+  return events.slice().sort((a, b) => {
+    const timeCompare = (a.startTime || "23:59").localeCompare(b.startTime || "23:59");
+    if (timeCompare !== 0) return timeCompare;
+    return a.title.localeCompare(b.title, "zh-Hans-CN");
+  });
+}
+
+function readJsonStorage<T>(key: string, fallback: T, normalize?: (value: T) => T): T {
+  if (typeof window === "undefined") return fallback;
+
+  const saved = window.localStorage.getItem(key);
+  if (!saved) return fallback;
+
+  try {
+    const parsed = JSON.parse(saved) as T;
+    return normalize ? normalize(parsed) : parsed;
+  } catch {
+    window.localStorage.removeItem(key);
+    return fallback;
+  }
 }
 
 function normalizeTodo(todo: CalendarTodo): CalendarTodo {
