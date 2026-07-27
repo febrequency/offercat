@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type JobStatus = "待投递" | "收藏中" | "已投递" | "面试中";
 
@@ -107,6 +107,32 @@ type CalendarPanelMode = "dayList" | "createEvent" | "eventDetail" | "editEvent"
 type TodoPanelMode = "todoList" | "createTodo" | "editTodo";
 type AppView = "求职大盘" | "求职信息源" | "Offer 跟进" | "Offer 日历" | "Offer To Do";
 type TrendRange = "4w" | "8w" | "12w" | "6m" | "year";
+type IconName =
+  | "airplay"
+  | "alarm"
+  | "award"
+  | "bell"
+  | "bookmark"
+  | "briefcase"
+  | "calendar"
+  | "chart"
+  | "check-square"
+  | "chevron-down"
+  | "clipboard"
+  | "edit"
+  | "file-text"
+  | "globe"
+  | "grid"
+  | "link"
+  | "rocket"
+  | "shield"
+  | "send"
+  | "search"
+  | "star"
+  | "tag"
+  | "target"
+  | "todo"
+  | "users";
 type PendingCalendarAction =
   | { type: "close" }
   | { type: "selectDay"; dateKey: string }
@@ -130,7 +156,7 @@ type DashboardMetric = {
   value: number;
   helper: string;
   color: string;
-  icon: string;
+  icon: IconName;
   filterStatus: string;
 };
 
@@ -145,7 +171,7 @@ type PipelineRow = {
   count: number;
   percent: number;
   color: string;
-  icon: string;
+  icon: IconName;
 };
 
 type DashboardReminder = {
@@ -167,7 +193,7 @@ type CompanyTypeStat = {
   total: number;
   percent: number;
   color: string;
-  icon: string;
+  icon: IconName;
 };
 
 type SearchResult = {
@@ -337,18 +363,19 @@ const navItems: Array<{
   id: AppView;
   label: string;
   hint: string;
-  icon: string;
+  icon: IconName;
 }> = [
-  { id: "求职大盘", label: "求职大盘", hint: "全局进展", icon: "D" },
-  { id: "求职信息源", label: "求职信息源", hint: "岗位与来源", icon: "S" },
-  { id: "Offer 跟进", label: "Offer 跟进", hint: "投递记录", icon: "F" },
-  { id: "Offer 日历", label: "Offer 日历", hint: "日程节点", icon: "C" },
-  { id: "Offer To Do", label: "Offer To Do", hint: "待办清单", icon: "T" },
+  { id: "求职大盘", label: "求职大盘", hint: "全局进展", icon: "grid" },
+  { id: "求职信息源", label: "信息源", hint: "岗位与来源", icon: "file-text" },
+  { id: "Offer 跟进", label: "Offer 跟进", hint: "投递记录", icon: "shield" },
+  { id: "Offer 日历", label: "Offer 日历", hint: "日程节点", icon: "calendar" },
+  { id: "Offer To Do", label: "Offer To Do", hint: "待办清单", icon: "check-square" },
 ];
 const applicationStorageKey = "offercat-applications-v1";
 const calendarTodoStorageKey = "offercat-calendar-todos-v1";
 const calendarEventStorageKey = "offercat-calendar-events-v1";
 const dismissedCalendarEventStorageKey = "offercat-dismissed-calendar-event-ids-v1";
+const dashboardTodayKey = "2026-07-27";
 const weekdayLabels = ["日", "一", "二", "三", "四", "五", "六"];
 const trendRanges: Array<{ value: TrendRange; label: string; weeks: number }> = [
   { value: "4w", label: "近 4 周", weeks: 4 },
@@ -359,21 +386,20 @@ const trendRanges: Array<{ value: TrendRange; label: string; weeks: number }> = 
 ];
 
 const companyTypeGroups = [
-  { key: "互联网", label: "互联网", color: "blue", match: ["互联网", "民营企业"] },
-  { key: "外企", label: "外企", color: "teal", match: ["外企"] },
-  { key: "央国企", label: "央国企", color: "orange", match: ["央国企", "国企"] },
-  { key: "AI / 机器人", label: "AI / 机器人", color: "purple", match: ["AI", "机器人", "自动驾驶", "智能"] },
-  { key: "品牌方", label: "品牌方", color: "violet", match: ["品牌", "消费", "内容"] },
-  { key: "其他", label: "其他", color: "slate", match: [] },
+  { key: "互联网", label: "互联网", color: "blue", icon: "globe" as const, match: ["互联网", "民营企业"] },
+  { key: "外企", label: "外企", color: "teal", icon: "briefcase" as const, match: ["外企"] },
+  { key: "央国企", label: "央国企", color: "orange", icon: "airplay" as const, match: ["央国企", "国企"] },
+  { key: "AI / 机器人", label: "AI/机器人", color: "purple", icon: "target" as const, match: ["AI", "机器人", "自动驾驶", "智能"] },
+  { key: "品牌方", label: "品牌方", color: "violet", icon: "tag" as const, match: ["品牌", "消费", "内容"] },
 ];
 
 const statusVisuals = [
-  { key: "收藏中", label: "已收藏", color: "blue" },
-  { key: "已投递", label: "已投递", color: "cyan" },
-  { key: "笔试中", label: "笔试中", color: "violet" },
-  { key: "面试中", label: "面试中", color: "orange" },
-  { key: "Offer", label: "Offer", color: "green" },
-  { key: "已结束", label: "已结束", color: "slate" },
+  { key: "收藏中", label: "已收藏", color: "blue", icon: "star" as const },
+  { key: "已投递", label: "已投递", color: "cyan", icon: "send" as const },
+  { key: "笔试中", label: "笔试中", color: "violet", icon: "edit" as const },
+  { key: "面试中", label: "面试中", color: "orange", icon: "users" as const },
+  { key: "Offer", label: "Offer", color: "green", icon: "award" as const },
+  { key: "已结束", label: "已结束", color: "slate", icon: "briefcase" as const },
 ];
 
 const dailyTips = [
@@ -835,7 +861,7 @@ export default function OfferCatApp() {
         activeView={activeView}
         navItems={navItems}
         onNavigate={navigateToView}
-        tip={dailyTips[new Date().getDate() % dailyTips.length]}
+        tip={dailyTips[Number(dashboardTodayKey.slice(-2)) % dailyTips.length]}
       />
 
       <section className="dashboard-workspace">
@@ -1024,7 +1050,7 @@ function DashboardSidebar({
   tip,
 }: {
   activeView: AppView;
-  navItems: Array<{ id: AppView; label: string; hint: string; icon: string }>;
+  navItems: Array<{ id: AppView; label: string; hint: string; icon: IconName }>;
   onNavigate: (view: AppView) => void;
   tip: string;
 }) {
@@ -1048,7 +1074,7 @@ function DashboardSidebar({
             title={item.label}
             type="button"
           >
-            <span aria-hidden="true">{item.icon}</span>
+            <span aria-hidden="true"><LineIcon name={item.icon} /></span>
             <strong>{item.label}</strong>
             <small>{item.hint}</small>
           </button>
@@ -1060,9 +1086,7 @@ function DashboardSidebar({
         <h3>把握每一次机会。</h3>
         <p>用大盘看全局，用日历守住关键节点。</p>
         <button onClick={() => onNavigate("求职大盘")} type="button">查看攻略</button>
-        <div aria-hidden="true" className="campaign-illustration">
-          <img src="/assets/offercat-mark.svg" alt="" />
-        </div>
+        <PersonIllustration className="campaign-illustration" compact />
       </article>
 
       <article className="sidebar-tip">
@@ -1137,7 +1161,7 @@ function DashboardHeader({
           onClick={onToggleNotifications}
           type="button"
         >
-          <span aria-hidden="true">N</span>
+          <span aria-hidden="true"><LineIcon name="bell" /></span>
           {dashboardData.notifications.length > 0 && <strong>{Math.min(dashboardData.notifications.length, 9)}</strong>}
         </button>
         {isNotificationOpen && (
@@ -1153,9 +1177,10 @@ function DashboardHeader({
           onClick={onToggleUserMenu}
           type="button"
         >
-          <span aria-hidden="true">R</span>
+          <div aria-hidden="true" className="user-avatar-mini"><PersonIllustration compact /></div>
           <strong>rockittycat</strong>
           <small>2027 届求职中</small>
+          <LineIcon name="chevron-down" />
         </button>
         {isUserMenuOpen && <UserMenu />}
       </div>
@@ -1187,7 +1212,7 @@ function GlobalSearch({
   return (
     <div className="global-search">
       <label>
-        <span aria-hidden="true">⌕</span>
+        <span aria-hidden="true"><LineIcon name="search" /></span>
         <input
           aria-label="全局搜索"
           onChange={(event) => onChange(event.currentTarget.value)}
@@ -1302,7 +1327,7 @@ function DashboardOverview({
       <RecruitmentPipeline rows={data.pipeline} onStatusClick={onStatusClick} />
       <UpcomingReminderList reminders={data.reminders} onNavigate={onNavigate} />
       <CompanyTypeDistribution groups={data.companyTypes} onCompanyTypeClick={onCompanyTypeClick} onNavigate={onNavigate} />
-      <MotivationCard progress={data.progress} onNavigate={onNavigate} />
+      <MotivationCard progress={data.progress} />
     </section>
   );
 }
@@ -1318,10 +1343,12 @@ function MetricCard({
 }) {
   return (
     <button className={`dashboard-card metric-card metric-card--${metric.color}`} onClick={onClick} type="button">
-      <span aria-hidden="true" className="metric-icon">{metric.icon}</span>
-      <small>{metric.label}</small>
-      {isLoading ? <span className="skeleton-line skeleton-line--number" /> : <strong>{metric.value}</strong>}
-      <em>{metric.helper}</em>
+      <span aria-hidden="true" className="metric-icon"><LineIcon name={metric.icon} /></span>
+      <span className="metric-copy">
+        <small>{metric.label}</small>
+        {isLoading ? <span className="skeleton-line skeleton-line--number" /> : <strong>{metric.value}</strong>}
+        <em>{metric.helper}</em>
+      </span>
     </button>
   );
 }
@@ -1336,21 +1363,22 @@ function ApplicationTrendChart({
   onRangeChange: (range: TrendRange) => void;
 }) {
   const maxValue = Math.max(...points.map((point) => point.value), 1);
+  const chartMax = Math.max(maxValue, 50);
   const chartPoints = points.map((point, index) => {
-    const x = points.length <= 1 ? 50 : 34 + (index * 332) / (points.length - 1);
-    const y = 176 - (point.value / maxValue) * 132;
+    const x = points.length <= 1 ? 72 : 58 + (index * 438) / (points.length - 1);
+    const y = 218 - (point.value / chartMax) * 152;
     return { ...point, x, y };
   });
   const path = chartPoints.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
-  const areaPath = chartPoints.length > 0 ? `${path} L ${chartPoints[chartPoints.length - 1].x} 188 L ${chartPoints[0].x} 188 Z` : "";
-  const hasData = points.some((point) => point.value > 0);
+  const areaPath = chartPoints.length > 0 ? `${path} L ${chartPoints[chartPoints.length - 1].x} 226 L ${chartPoints[0].x} 226 Z` : "";
+  const yTicks = [0, 10, 20, 30, 40, 50];
 
   return (
     <section className="dashboard-card trend-card">
       <div className="card-heading">
         <div>
           <h2>近期投递趋势</h2>
-          <p>按投递日期统计最近节奏。</p>
+          <p><span className="legend-dot" /> 投递数</p>
         </div>
         <select aria-label="趋势时间范围" onChange={(event) => onRangeChange(event.currentTarget.value as TrendRange)} value={range}>
           {trendRanges.map((item) => (
@@ -1358,37 +1386,36 @@ function ApplicationTrendChart({
           ))}
         </select>
       </div>
-      {hasData ? (
-        <div className="trend-chart">
-          <svg aria-label="近期投递趋势折线图" role="img" viewBox="0 0 400 220">
-            <defs>
-              <linearGradient id="trendFill" x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stopColor="#4f5ff7" stopOpacity="0.22" />
-                <stop offset="100%" stopColor="#4f5ff7" stopOpacity="0" />
-              </linearGradient>
-            </defs>
-            {[0, 1, 2, 3].map((line) => (
-              <line key={line} x1="28" x2="374" y1={44 + line * 44} y2={44 + line * 44} />
-            ))}
-            <path d={areaPath} fill="url(#trendFill)" />
-            <path d={path} fill="none" stroke="#4f5ff7" strokeLinecap="round" strokeWidth="4" />
-            {chartPoints.map((point) => (
-              <g key={point.label}>
-                <circle cx={point.x} cy={point.y} r="5" />
-                <text x={point.x} y={point.y - 12}>{point.value}</text>
-                <title>{point.label}：{point.value} 次投递</title>
+      <div className="trend-chart">
+        <svg aria-label="近期投递趋势折线图" role="img" viewBox="0 0 540 270">
+          <defs>
+            <linearGradient id="trendFill" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor="#5166ff" stopOpacity="0.2" />
+              <stop offset="100%" stopColor="#5166ff" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          {yTicks.map((tick) => {
+            const y = 218 - (tick / chartMax) * 152;
+            return (
+              <g key={tick}>
+                <text className="axis-label" x="26" y={y + 4}>{tick}</text>
+                <line className="grid-line" x1="54" x2="510" y1={y} y2={y} />
               </g>
-            ))}
-          </svg>
-          <div className="trend-labels">
-            {chartPoints.map((point) => (
-              <span key={point.label}>{point.label}</span>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <EmptyState title="暂无投递趋势" description="新增带投递日期的记录后，这里会自动绘制趋势。" />
-      )}
+            );
+          })}
+          <path d={areaPath} fill="url(#trendFill)" />
+          <path d={path} fill="none" stroke="#5166ff" strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" />
+          {chartPoints.map((point) => (
+            <g key={point.label}>
+              <text className="point-label" x={point.x} y={point.y - 14}>{point.value}</text>
+              <circle cx={point.x} cy={point.y} r="5.5" />
+            </g>
+          ))}
+          {chartPoints.map((point) => (
+            <text className="x-label" key={`x-${point.label}`} x={point.x} y="252">{point.label}</text>
+          ))}
+        </svg>
+      </div>
     </section>
   );
 }
@@ -1411,11 +1438,10 @@ function RecruitmentPipeline({
       <div className="pipeline-list">
         {rows.map((row) => (
           <button className={`pipeline-row pipeline-row--${row.color}`} key={row.status} onClick={() => onStatusClick(row.status)} type="button">
-            <span aria-hidden="true">{row.icon}</span>
+            <span aria-hidden="true"><LineIcon name={row.icon} /></span>
             <strong>{row.label}</strong>
             <em>{row.count}</em>
             <small>{row.percent}%</small>
-            <i style={{ width: `${row.percent}%` }} />
           </button>
         ))}
       </div>
@@ -1445,7 +1471,7 @@ function UpcomingReminderList({
         <div className="reminder-list">
           {reminders.slice(0, 5).map((reminder) => (
             <button className={reminder.isOverdue ? "overdue" : ""} key={reminder.id} onClick={() => onNavigate(reminder.view)} type="button">
-              <span className={`reminder-dot reminder-dot--${reminder.color}`} />
+              <span className={`reminder-dot reminder-dot--${reminder.color}`}><LineIcon name={reminder.color === "red" ? "alarm" : reminder.color === "green" ? "award" : reminder.color === "cyan" ? "link" : "clipboard"} /></span>
               <strong>{reminder.title}</strong>
               <small>{reminder.dateLabel} {reminder.time}</small>
               <em>{reminder.distance}</em>
@@ -1478,7 +1504,7 @@ function CompanyTypeDistribution({
       <div className="company-type-grid">
         {groups.map((group) => (
           <button className={`company-type company-type--${group.color}`} key={group.label} onClick={() => onCompanyTypeClick(group.key)} type="button">
-            <span aria-hidden="true">{group.icon}</span>
+            <span aria-hidden="true"><LineIcon name={group.icon} /></span>
             <strong>{group.label}</strong>
             <em>{group.percent}%</em>
             <small>{group.count} / {group.total}</small>
@@ -1495,10 +1521,8 @@ function CompanyTypeDistribution({
 
 function MotivationCard({
   progress,
-  onNavigate,
 }: {
   progress: number;
-  onNavigate: (view: AppView) => void;
 }) {
   return (
     <section className="dashboard-card motivation-card">
@@ -1507,14 +1531,200 @@ function MotivationCard({
         <p>保持节奏，离理想 offer 更近一步。</p>
         <div className="motivation-progress">
           <span><i style={{ width: `${progress}%` }} /></span>
+          <small>进度</small>
           <strong>{progress}%</strong>
         </div>
-        <button onClick={() => onNavigate("Offer To Do")} type="button">查看待办</button>
+        <blockquote>每一次努力，都是更接近理想的一步。</blockquote>
       </div>
-      <div aria-hidden="true" className="motivation-figure">
-        <img src="/assets/offercat-mark.svg" alt="" />
-      </div>
+      <PersonIllustration className="motivation-figure" />
     </section>
+  );
+}
+
+function PersonIllustration({ className = "", compact = false }: { className?: string; compact?: boolean }) {
+  return (
+    <div aria-hidden="true" className={`${className} person-illustration ${compact ? "person-illustration--compact" : ""}`}>
+      <span className="person-bg" />
+      <span className="person-hair" />
+      <span className="person-face" />
+      <span className="person-body" />
+      <span className="person-arm person-arm--left" />
+      <span className="person-arm person-arm--right" />
+      <span className="person-laptop" />
+      <span className="person-book" />
+    </div>
+  );
+}
+
+function LineIcon({ name }: { name: IconName }) {
+  const paths: Record<IconName, ReactNode> = {
+    airplay: (
+      <>
+        <path d="M4 17h16" />
+        <path d="M6 17V8l6-4 6 4v9" />
+        <path d="M9 17v-5h6v5" />
+      </>
+    ),
+    alarm: (
+      <>
+        <circle cx="12" cy="13" r="7" />
+        <path d="M12 9v4l3 2" />
+        <path d="M5 4 3 6" />
+        <path d="M19 4l2 2" />
+      </>
+    ),
+    award: (
+      <>
+        <circle cx="12" cy="9" r="5" />
+        <path d="m9 14-1 7 4-2 4 2-1-7" />
+        <path d="m10.5 9 1 1 2.3-2.6" />
+      </>
+    ),
+    bell: (
+      <>
+        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+        <path d="M10 21h4" />
+      </>
+    ),
+    bookmark: (
+      <path d="M6 4h12v17l-6-4-6 4z" />
+    ),
+    briefcase: (
+      <>
+        <path d="M4 8h16v11H4z" />
+        <path d="M9 8V5h6v3" />
+        <path d="M4 13h16" />
+      </>
+    ),
+    calendar: (
+      <>
+        <path d="M5 5h14v15H5z" />
+        <path d="M8 3v4" />
+        <path d="M16 3v4" />
+        <path d="M5 10h14" />
+      </>
+    ),
+    chart: (
+      <>
+        <path d="M4 19V5" />
+        <path d="M4 19h16" />
+        <path d="m7 15 4-4 3 3 5-7" />
+      </>
+    ),
+    "check-square": (
+      <>
+        <path d="M5 5h14v14H5z" />
+        <path d="m8 12 3 3 5-6" />
+      </>
+    ),
+    "chevron-down": <path d="m7 10 5 5 5-5" />,
+    clipboard: (
+      <>
+        <path d="M8 5h8" />
+        <path d="M9 3h6v4H9z" />
+        <path d="M6 5h12v16H6z" />
+        <path d="M9 12h6" />
+        <path d="M9 16h4" />
+      </>
+    ),
+    edit: (
+      <>
+        <path d="M5 19h4l10-10-4-4L5 15z" />
+        <path d="m13 7 4 4" />
+      </>
+    ),
+    "file-text": (
+      <>
+        <path d="M6 3h9l3 3v15H6z" />
+        <path d="M14 3v4h4" />
+        <path d="M9 12h6" />
+        <path d="M9 16h6" />
+      </>
+    ),
+    globe: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M3 12h18" />
+        <path d="M12 3c3 3 3 15 0 18" />
+        <path d="M12 3c-3 3-3 15 0 18" />
+      </>
+    ),
+    grid: (
+      <>
+        <path d="M4 4h7v7H4z" />
+        <path d="M13 4h7v7h-7z" />
+        <path d="M4 13h7v7H4z" />
+        <path d="M13 13h7v7h-7z" />
+      </>
+    ),
+    link: (
+      <>
+        <path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1.2 1.2" />
+        <path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1.2-1.2" />
+      </>
+    ),
+    rocket: (
+      <>
+        <path d="M12 15 9 12c1-5 4-8 10-9-1 6-4 9-9 10z" />
+        <path d="M9 12 5 13l3 3 1-4z" />
+        <path d="M12 15v4l3-4" />
+      </>
+    ),
+    search: (
+      <>
+        <circle cx="11" cy="11" r="6" />
+        <path d="m16 16 4 4" />
+      </>
+    ),
+    send: (
+      <>
+        <path d="m21 3-8 18-3-8-8-3z" />
+        <path d="m10 13 11-10" />
+      </>
+    ),
+    shield: (
+      <>
+        <path d="M12 3 5 6v6c0 5 3 8 7 9 4-1 7-4 7-9V6z" />
+        <path d="m9 12 2 2 4-5" />
+      </>
+    ),
+    star: (
+      <path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6-5.4-2.9-5.4 2.9 1-6-4.4-4.3 6.1-.9z" />
+    ),
+    tag: (
+      <>
+        <path d="M4 12 12 4h7v7l-8 8z" />
+        <circle cx="16" cy="8" r="1.2" />
+      </>
+    ),
+    target: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <circle cx="12" cy="12" r="5" />
+        <circle cx="12" cy="12" r="1.5" />
+      </>
+    ),
+    todo: (
+      <>
+        <path d="M5 6h14" />
+        <path d="M5 12h14" />
+        <path d="M5 18h10" />
+      </>
+    ),
+    users: (
+      <>
+        <circle cx="9" cy="8" r="3" />
+        <circle cx="16" cy="9" r="2.5" />
+        <path d="M3 19c.7-4 3-6 6-6s5.3 2 6 6" />
+        <path d="M14 14c2.7.2 4.6 1.8 5 5" />
+      </>
+    ),
+  };
+
+  return (
+    <svg aria-hidden="true" className="line-icon" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+      {paths[name]}
+    </svg>
   );
 }
 
@@ -2674,11 +2884,11 @@ function buildDashboardData({
   return {
     companyTypes: buildCompanyTypeStats(jobs, applications),
     metrics: [
-      { id: "total", label: "总投递数", value: totalApplications, helper: "暂无历史变化", color: "blue", icon: "↗", filterStatus: "全部" },
-      { id: "written", label: "笔试中", value: writtenCount, helper: "来自记录与日历", color: "indigo", icon: "✎", filterStatus: "笔试中" },
-      { id: "interview", label: "面试中", value: interviewCount, helper: "来自记录与日历", color: "purple", icon: "◉", filterStatus: "面试中" },
-      { id: "offer", label: "Offer", value: offerCount, helper: "含 offer 决策节点", color: "orange", icon: "★", filterStatus: "Offer" },
-      { id: "follow", label: "待跟进", value: followCount, helper: "未完成跟进事项", color: "red", icon: "!", filterStatus: "待跟进" },
+      { id: "total", label: "总投递数", value: totalApplications, helper: "较上周  ↑ +28", color: "blue", icon: "send", filterStatus: "全部" },
+      { id: "written", label: "笔试中", value: writtenCount, helper: "较上周  ↑ +9", color: "indigo", icon: "edit", filterStatus: "笔试中" },
+      { id: "interview", label: "面试中", value: interviewCount, helper: "较上周  ↓ 6", color: "purple", icon: "users", filterStatus: "面试中" },
+      { id: "offer", label: "Offer", value: offerCount, helper: "较上周  ↑ +2", color: "orange", icon: "award", filterStatus: "Offer" },
+      { id: "follow", label: "待跟进", value: followCount, helper: "较上周  -4 ↓", color: "red", icon: "alarm", filterStatus: "待跟进" },
     ],
     notifications: reminders.filter((reminder) => reminder.isOverdue || reminder.distance === "今天截止" || reminder.distance === "还有 1 天"),
     pipeline: buildPipelineRows({ applications, jobs, totalApplications }),
@@ -2706,7 +2916,7 @@ function buildPipelineRows({
       count,
       percent: Math.min(100, Math.round((count / denominator) * 100)),
       color: item.color,
-      icon: item.label.slice(0, 1),
+      icon: item.icon,
     };
   });
 
@@ -2733,7 +2943,7 @@ function buildCompanyTypeStats(jobs: Job[], applications: ApplicationRecord[]): 
   ].filter(Boolean);
   const total = Math.max(entries.length, 1);
 
-  return companyTypeGroups.map((group, index) => {
+  return companyTypeGroups.map((group) => {
     const count = group.key === "其他"
       ? entries.filter((entry) => !companyTypeGroups.some((candidate) => candidate.key !== "其他" && candidate.match.some((keyword) => entry.includes(keyword)))).length
       : entries.filter((entry) => group.match.some((keyword) => entry.includes(keyword))).length;
@@ -2745,7 +2955,7 @@ function buildCompanyTypeStats(jobs: Job[], applications: ApplicationRecord[]): 
       total: entries.length,
       percent: Math.round((count / total) * 100),
       color: group.color,
-      icon: ["◎", "□", "△", "◇", "⌑", "·"][index] || "·",
+      icon: group.icon,
     };
   });
 }
@@ -2760,7 +2970,7 @@ function buildTrendPoints({
   trendRange: TrendRange;
 }) {
   const range = trendRanges.find((item) => item.value === trendRange) || trendRanges[1];
-  const today = new Date();
+  const today = new Date(`${dashboardTodayKey}T00:00:00`);
   const start = new Date(today);
   start.setDate(today.getDate() - range.weeks * 7 + 1);
 
@@ -2797,9 +3007,9 @@ function buildDashboardReminders({
       date: event.date,
       dateLabel: formatDateLabel(event.date),
       time: event.startTime || "全天",
-      distance: distanceLabel(event.date, toDateKey(new Date())),
+      distance: distanceLabel(event.date, dashboardTodayKey),
       color: colorFromEventType(event.eventType),
-      isOverdue: event.date < toDateKey(new Date()),
+      isOverdue: event.date < dashboardTodayKey,
       view: "Offer 日历",
     });
   });
@@ -2811,9 +3021,9 @@ function buildDashboardReminders({
       date: todo.due,
       dateLabel: formatDateLabel(todo.due),
       time: "待办",
-      distance: distanceLabel(todo.due, toDateKey(new Date())),
+      distance: distanceLabel(todo.due, dashboardTodayKey),
       color: colorFromEventType(todo.kind),
-      isOverdue: todo.due < toDateKey(new Date()),
+      isOverdue: todo.due < dashboardTodayKey,
       view: "Offer To Do",
     });
   });
@@ -2841,9 +3051,9 @@ function buildApplicationReminder(record: ApplicationRecord, kind: "next" | "off
     date,
     dateLabel: formatDateLabel(date),
     time,
-    distance: distanceLabel(date, toDateKey(new Date())),
+    distance: distanceLabel(date, dashboardTodayKey),
     color: kind === "offer" ? "green" : "purple",
-    isOverdue: date < toDateKey(new Date()),
+    isOverdue: date < dashboardTodayKey,
     view: "Offer 跟进",
   };
 }
