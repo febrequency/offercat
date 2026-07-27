@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type JobStatus = "待投递" | "收藏中" | "已投递" | "面试中";
@@ -511,34 +510,51 @@ export default function OfferCatApp() {
   const [companyKind, setCompanyKind] = useState("全部");
   const [applicationFilter, setApplicationFilter] = useState("全部");
   const [form, setForm] = useState<ApplicationRecord>(blankApplication);
-  const [applications, setApplications] = useState<ApplicationRecord[]>(() => readJsonStorage(applicationStorageKey, []));
+  const [applications, setApplications] = useState<ApplicationRecord[]>([]);
   const [formMessage, setFormMessage] = useState("");
-  const [calendarTodos, setCalendarTodos] = useState<CalendarTodo[]>(() =>
-    readJsonStorage(calendarTodoStorageKey, defaultCalendarTodos, (items) => items.map(normalizeTodo)),
-  );
-  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>(() =>
-    readJsonStorage<CalendarEvent[]>(calendarEventStorageKey, [], (items) => items.map(normalizeCalendarEvent)),
-  );
-  const [dismissedCalendarEventIds, setDismissedCalendarEventIds] = useState<string[]>(() =>
-    readJsonStorage<string[]>(dismissedCalendarEventStorageKey, []),
-  );
+  const [calendarTodos, setCalendarTodos] = useState<CalendarTodo[]>(defaultCalendarTodos);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+  const [dismissedCalendarEventIds, setDismissedCalendarEventIds] = useState<string[]>([]);
+  const [isStorageReady, setIsStorageReady] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
+    window.queueMicrotask(() => {
+      if (cancelled) return;
+
+      setApplications(readJsonStorage(applicationStorageKey, []));
+      setCalendarTodos(readJsonStorage(calendarTodoStorageKey, defaultCalendarTodos, (items) => items.map(normalizeTodo)));
+      setCalendarEvents(readJsonStorage<CalendarEvent[]>(calendarEventStorageKey, [], (items) => items.map(normalizeCalendarEvent)));
+      setDismissedCalendarEventIds(readJsonStorage<string[]>(dismissedCalendarEventStorageKey, []));
+      setIsStorageReady(true);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isStorageReady) return;
     window.localStorage.setItem(applicationStorageKey, JSON.stringify(applications));
-  }, [applications]);
+  }, [applications, isStorageReady]);
 
   useEffect(() => {
+    if (!isStorageReady) return;
     window.localStorage.setItem(calendarTodoStorageKey, JSON.stringify(calendarTodos));
-  }, [calendarTodos]);
+  }, [calendarTodos, isStorageReady]);
 
   useEffect(() => {
+    if (!isStorageReady) return;
     window.localStorage.setItem(calendarEventStorageKey, JSON.stringify(calendarEvents));
-  }, [calendarEvents]);
+  }, [calendarEvents, isStorageReady]);
 
   useEffect(() => {
+    if (!isStorageReady) return;
     window.localStorage.setItem(dismissedCalendarEventStorageKey, JSON.stringify(dismissedCalendarEventIds));
-  }, [dismissedCalendarEventIds]);
+  }, [dismissedCalendarEventIds, isStorageReady]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setIsDashboardLoading(false), 220);
@@ -1015,7 +1031,7 @@ function DashboardSidebar({
   return (
     <aside className="dashboard-sidebar">
       <button className="sidebar-brand" onClick={() => onNavigate("求职大盘")} type="button">
-        <Image src="/assets/offercat-mark.svg" alt="" width={42} height={42} />
+        <img src="/assets/offercat-mark.svg" alt="" />
         <span>
           <strong>offercat</strong>
           秋招项目管理
@@ -1045,7 +1061,7 @@ function DashboardSidebar({
         <p>用大盘看全局，用日历守住关键节点。</p>
         <button onClick={() => onNavigate("求职大盘")} type="button">查看攻略</button>
         <div aria-hidden="true" className="campaign-illustration">
-          <Image src="/assets/offercat-mark.svg" alt="" width={52} height={52} />
+          <img src="/assets/offercat-mark.svg" alt="" />
         </div>
       </article>
 
@@ -1496,7 +1512,7 @@ function MotivationCard({
         <button onClick={() => onNavigate("Offer To Do")} type="button">查看待办</button>
       </div>
       <div aria-hidden="true" className="motivation-figure">
-        <Image src="/assets/offercat-mark.svg" alt="" width={82} height={82} />
+        <img src="/assets/offercat-mark.svg" alt="" />
       </div>
     </section>
   );
