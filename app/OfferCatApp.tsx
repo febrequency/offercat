@@ -1,6 +1,69 @@
 "use client";
 
-import { type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  AlarmClock,
+  Award,
+  Bell,
+  Bot,
+  BriefcaseBusiness,
+  Building2,
+  CalendarDays,
+  CheckCircle2,
+  CheckSquare,
+  ChevronDown,
+  ClipboardList,
+  FileText,
+  Globe2,
+  Grid2X2,
+  Link2,
+  Menu,
+  NotebookPen,
+  Search,
+  Send,
+  ShieldCheck,
+  Sparkles,
+  Star,
+  Tags,
+  Target,
+  UsersRound,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Command,
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Progress } from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type JobStatus = "待投递" | "收藏中" | "已投递" | "面试中";
 
@@ -107,32 +170,7 @@ type CalendarPanelMode = "dayList" | "createEvent" | "eventDetail" | "editEvent"
 type TodoPanelMode = "todoList" | "createTodo" | "editTodo";
 type AppView = "求职大盘" | "求职信息源" | "Offer 跟进" | "Offer 日历" | "Offer To Do";
 type TrendRange = "4w" | "8w" | "12w" | "6m" | "year";
-type IconName =
-  | "airplay"
-  | "alarm"
-  | "award"
-  | "bell"
-  | "bookmark"
-  | "briefcase"
-  | "calendar"
-  | "chart"
-  | "check-square"
-  | "chevron-down"
-  | "clipboard"
-  | "edit"
-  | "file-text"
-  | "globe"
-  | "grid"
-  | "link"
-  | "rocket"
-  | "shield"
-  | "send"
-  | "search"
-  | "star"
-  | "tag"
-  | "target"
-  | "todo"
-  | "users";
+type IconComponent = LucideIcon;
 type PendingCalendarAction =
   | { type: "close" }
   | { type: "selectDay"; dateKey: string }
@@ -156,7 +194,7 @@ type DashboardMetric = {
   value: number;
   helper: string;
   color: string;
-  icon: IconName;
+  icon: IconComponent;
   filterStatus: string;
 };
 
@@ -171,7 +209,7 @@ type PipelineRow = {
   count: number;
   percent: number;
   color: string;
-  icon: IconName;
+  icon: IconComponent;
 };
 
 type DashboardReminder = {
@@ -193,7 +231,7 @@ type CompanyTypeStat = {
   total: number;
   percent: number;
   color: string;
-  icon: IconName;
+  icon: IconComponent;
 };
 
 type SearchResult = {
@@ -363,13 +401,13 @@ const navItems: Array<{
   id: AppView;
   label: string;
   hint: string;
-  icon: IconName;
+  icon: IconComponent;
 }> = [
-  { id: "求职大盘", label: "求职大盘", hint: "全局进展", icon: "grid" },
-  { id: "求职信息源", label: "信息源", hint: "岗位与来源", icon: "file-text" },
-  { id: "Offer 跟进", label: "Offer 跟进", hint: "投递记录", icon: "shield" },
-  { id: "Offer 日历", label: "Offer 日历", hint: "日程节点", icon: "calendar" },
-  { id: "Offer To Do", label: "Offer To Do", hint: "待办清单", icon: "check-square" },
+  { id: "求职大盘", label: "求职大盘", hint: "全局进展", icon: Grid2X2 },
+  { id: "求职信息源", label: "信息源", hint: "岗位与来源", icon: FileText },
+  { id: "Offer 跟进", label: "Offer 跟进", hint: "投递记录", icon: ShieldCheck },
+  { id: "Offer 日历", label: "Offer 日历", hint: "日程节点", icon: CalendarDays },
+  { id: "Offer To Do", label: "Offer To Do", hint: "待办清单", icon: CheckSquare },
 ];
 const applicationStorageKey = "offercat-applications-v1";
 const calendarTodoStorageKey = "offercat-calendar-todos-v1";
@@ -386,20 +424,20 @@ const trendRanges: Array<{ value: TrendRange; label: string; weeks: number }> = 
 ];
 
 const companyTypeGroups = [
-  { key: "互联网", label: "互联网", color: "blue", icon: "globe" as const, match: ["互联网", "民营企业"] },
-  { key: "外企", label: "外企", color: "teal", icon: "briefcase" as const, match: ["外企"] },
-  { key: "央国企", label: "央国企", color: "orange", icon: "airplay" as const, match: ["央国企", "国企"] },
-  { key: "AI / 机器人", label: "AI/机器人", color: "purple", icon: "target" as const, match: ["AI", "机器人", "自动驾驶", "智能"] },
-  { key: "品牌方", label: "品牌方", color: "violet", icon: "tag" as const, match: ["品牌", "消费", "内容"] },
+  { key: "互联网", label: "互联网", color: "blue", icon: Globe2, match: ["互联网", "民营企业"] },
+  { key: "外企", label: "外企", color: "teal", icon: BriefcaseBusiness, match: ["外企"] },
+  { key: "央国企", label: "央国企", color: "orange", icon: Building2, match: ["央国企", "国企"] },
+  { key: "AI / 机器人", label: "AI/机器人", color: "purple", icon: Bot, match: ["AI", "机器人", "自动驾驶", "智能"] },
+  { key: "品牌方", label: "品牌方", color: "violet", icon: Tags, match: ["品牌", "消费", "内容"] },
 ];
 
 const statusVisuals = [
-  { key: "收藏中", label: "已收藏", color: "blue", icon: "star" as const },
-  { key: "已投递", label: "已投递", color: "cyan", icon: "send" as const },
-  { key: "笔试中", label: "笔试中", color: "violet", icon: "edit" as const },
-  { key: "面试中", label: "面试中", color: "orange", icon: "users" as const },
-  { key: "Offer", label: "Offer", color: "green", icon: "award" as const },
-  { key: "已结束", label: "已结束", color: "slate", icon: "briefcase" as const },
+  { key: "收藏中", label: "已收藏", color: "blue", icon: Star },
+  { key: "已投递", label: "已投递", color: "cyan", icon: Send },
+  { key: "笔试中", label: "笔试中", color: "violet", icon: NotebookPen },
+  { key: "面试中", label: "面试中", color: "orange", icon: UsersRound },
+  { key: "Offer", label: "Offer", color: "green", icon: Award },
+  { key: "已结束", label: "已结束", color: "slate", icon: BriefcaseBusiness },
 ];
 
 const dailyTips = [
@@ -525,7 +563,6 @@ export default function OfferCatApp() {
   const [query, setQuery] = useState("");
   const [globalQuery, setGlobalQuery] = useState("");
   const [isSearchActive, setIsSearchActive] = useState(false);
-  const [selectedSearchIndex, setSelectedSearchIndex] = useState(0);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [trendRange, setTrendRange] = useState<TrendRange>("8w");
@@ -542,7 +579,6 @@ export default function OfferCatApp() {
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [dismissedCalendarEventIds, setDismissedCalendarEventIds] = useState<string[]>([]);
   const [isStorageReady, setIsStorageReady] = useState(false);
-  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -594,7 +630,6 @@ export default function OfferCatApp() {
 
       event.preventDefault();
       setIsSearchActive(true);
-      searchInputRef.current?.focus();
     }
 
     window.addEventListener("keydown", handleKeyDown);
@@ -824,35 +859,13 @@ export default function OfferCatApp() {
     setCompanyKind("全部");
   }
 
-  function handleSearchCommit(index = selectedSearchIndex) {
-    const result = searchResults[index] || searchResults[0];
+  function handleSearchCommit(result = searchResults[0]) {
     if (!result) return;
 
     navigateToView(result.view);
     if (result.view === "求职信息源") setQuery(result.title);
     if (result.view === "Offer 跟进") setApplicationFilter("全部");
     setIsSearchActive(false);
-  }
-
-  function handleSearchKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      setSelectedSearchIndex((current) => Math.min(current + 1, Math.max(searchResults.length - 1, 0)));
-      return;
-    }
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setSelectedSearchIndex((current) => Math.max(current - 1, 0));
-      return;
-    }
-    if (event.key === "Enter") {
-      event.preventDefault();
-      handleSearchCommit();
-      return;
-    }
-    if (event.key === "Escape") {
-      setIsSearchActive(false);
-    }
   }
 
   return (
@@ -872,26 +885,15 @@ export default function OfferCatApp() {
           isNotificationOpen={isNotificationOpen}
           isSearchActive={isSearchActive}
           isUserMenuOpen={isUserMenuOpen}
-          searchInputRef={searchInputRef}
           searchResults={searchResults}
-          selectedSearchIndex={selectedSearchIndex}
           onNavigate={navigateToView}
           onSearchChange={(value) => {
             setGlobalQuery(value);
-            setSelectedSearchIndex(0);
-            setIsSearchActive(true);
           }}
           onSearchCommit={handleSearchCommit}
-          onSearchFocus={() => setIsSearchActive(true)}
-          onSearchKeyDown={handleSearchKeyDown}
-          onToggleNotifications={() => {
-            setIsNotificationOpen((current) => !current);
-            setIsUserMenuOpen(false);
-          }}
-          onToggleUserMenu={() => {
-            setIsUserMenuOpen((current) => !current);
-            setIsNotificationOpen(false);
-          }}
+          onSearchOpenChange={setIsSearchActive}
+          onNotificationOpenChange={setIsNotificationOpen}
+          onUserMenuOpenChange={setIsUserMenuOpen}
         />
 
         {activeView === "求职大盘" && (
@@ -1050,43 +1052,82 @@ function DashboardSidebar({
   tip,
 }: {
   activeView: AppView;
-  navItems: Array<{ id: AppView; label: string; hint: string; icon: IconName }>;
+  navItems: Array<{ id: AppView; label: string; hint: string; icon: IconComponent }>;
   onNavigate: (view: AppView) => void;
   tip: string;
 }) {
-  return (
-    <aside className="dashboard-sidebar">
-      <button className="sidebar-brand" onClick={() => onNavigate("求职大盘")} type="button">
-        <img src="/assets/offercat-mark.svg" alt="" />
-        <span>
-          <strong>offercat</strong>
-          秋招项目管理
-        </span>
-      </button>
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
-      <nav aria-label="主导航" className="sidebar-nav">
-        {navItems.map((item) => (
-          <button
+  const nav = (
+    <nav aria-label="主导航" className="sidebar-nav">
+      {navItems.map((item) => {
+        const Icon = item.icon;
+        return (
+          <Button
             aria-label={item.label}
             className={activeView === item.id ? "active" : ""}
             key={item.id}
             onClick={() => onNavigate(item.id)}
             title={item.label}
             type="button"
+            variant="ghost"
           >
-            <span aria-hidden="true"><LineIcon name={item.icon} /></span>
+            <span aria-hidden="true"><Icon /></span>
             <strong>{item.label}</strong>
             <small>{item.hint}</small>
-          </button>
-        ))}
-      </nav>
+          </Button>
+        );
+      })}
+    </nav>
+  );
+
+  return (
+    <>
+      <Sheet>
+        <SheetTrigger
+          render={
+            <Button aria-label="打开导航" className="mobile-sidebar-trigger" size="icon-lg" type="button" variant="outline" />
+          }
+        >
+          <Menu />
+        </SheetTrigger>
+        <SheetContent className="dashboard-mobile-sheet" side="left">
+          <SheetHeader>
+            <SheetTitle>offercat</SheetTitle>
+            <SheetDescription>秋招项目管理</SheetDescription>
+          </SheetHeader>
+          {nav}
+        </SheetContent>
+      </Sheet>
+
+      <aside className="dashboard-sidebar" data-collapsed={isCollapsed}>
+      <Button className="sidebar-brand" onClick={() => onNavigate("求职大盘")} type="button" variant="ghost">
+        <img src="/assets/offercat-mark.svg" alt="" />
+        <span>
+          <strong>offercat</strong>
+          秋招项目管理
+        </span>
+      </Button>
+
+      {nav}
+
+      <Button
+        aria-label={isCollapsed ? "展开导航栏" : "折叠导航栏"}
+        className="sidebar-collapse"
+        onClick={() => setIsCollapsed((current) => !current)}
+        size="icon-sm"
+        type="button"
+        variant="ghost"
+      >
+        {isCollapsed ? <Menu /> : <X />}
+      </Button>
 
       <article className="sidebar-campaign">
-        <span>校园招聘季</span>
-        <h3>把握每一次机会。</h3>
-        <p>用大盘看全局，用日历守住关键节点。</p>
-        <button onClick={() => onNavigate("求职大盘")} type="button">查看攻略</button>
-        <PersonIllustration className="campaign-illustration" compact />
+        <span>本周行动</span>
+        <h3>优先处理临近截止和待跟进岗位。</h3>
+        <p>把信息源、投递记录和日历节点保持同步。</p>
+        <Button onClick={() => onNavigate("Offer To Do")} size="sm" type="button" variant="secondary">查看待办</Button>
+        <div aria-hidden="true" className="campaign-mark"><Sparkles /></div>
       </article>
 
       <article className="sidebar-tip">
@@ -1094,6 +1135,7 @@ function DashboardSidebar({
         <p>{tip}</p>
       </article>
     </aside>
+    </>
   );
 }
 
@@ -1104,16 +1146,13 @@ function DashboardHeader({
   isNotificationOpen,
   isSearchActive,
   isUserMenuOpen,
-  searchInputRef,
   searchResults,
-  selectedSearchIndex,
   onNavigate,
   onSearchChange,
   onSearchCommit,
-  onSearchFocus,
-  onSearchKeyDown,
-  onToggleNotifications,
-  onToggleUserMenu,
+  onSearchOpenChange,
+  onNotificationOpenChange,
+  onUserMenuOpenChange,
 }: {
   activeView: AppView;
   dashboardData: DashboardData;
@@ -1121,16 +1160,13 @@ function DashboardHeader({
   isNotificationOpen: boolean;
   isSearchActive: boolean;
   isUserMenuOpen: boolean;
-  searchInputRef: RefObject<HTMLInputElement | null>;
   searchResults: SearchResult[];
-  selectedSearchIndex: number;
   onNavigate: (view: AppView) => void;
   onSearchChange: (value: string) => void;
-  onSearchCommit: (index?: number) => void;
-  onSearchFocus: () => void;
-  onSearchKeyDown: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
-  onToggleNotifications: () => void;
-  onToggleUserMenu: () => void;
+  onSearchCommit: (result?: SearchResult) => void;
+  onSearchOpenChange: (open: boolean) => void;
+  onNotificationOpenChange: (open: boolean) => void;
+  onUserMenuOpenChange: (open: boolean) => void;
 }) {
   const current = navItems.find((item) => item.id === activeView);
 
@@ -1142,111 +1178,102 @@ function DashboardHeader({
       </div>
 
       <GlobalSearch
-        inputRef={searchInputRef}
-        isActive={isSearchActive}
+        isOpen={isSearchActive}
         query={globalQuery}
         results={searchResults}
-        selectedIndex={selectedSearchIndex}
         onChange={onSearchChange}
         onCommit={onSearchCommit}
-        onFocus={onSearchFocus}
-        onKeyDown={onSearchKeyDown}
+        onOpenChange={onSearchOpenChange}
       />
 
       <div className="topbar-actions">
-        <button
-          aria-expanded={isNotificationOpen}
-          aria-label="打开通知面板"
-          className="notification-button"
-          onClick={onToggleNotifications}
-          type="button"
-        >
-          <span aria-hidden="true"><LineIcon name="bell" /></span>
-          {dashboardData.notifications.length > 0 && <strong>{Math.min(dashboardData.notifications.length, 9)}</strong>}
-        </button>
-        {isNotificationOpen && (
+        <Popover open={isNotificationOpen} onOpenChange={onNotificationOpenChange}>
+          <PopoverTrigger
+            render={
+              <Button aria-label="打开通知面板" className="notification-button" size="icon-lg" type="button" variant="ghost" />
+            }
+          >
+            <Bell />
+            {dashboardData.notifications.length > 0 && <strong>{Math.min(dashboardData.notifications.length, 9)}</strong>}
+          </PopoverTrigger>
           <NotificationPanel
             notifications={dashboardData.notifications}
             onNavigate={onNavigate}
           />
-        )}
+        </Popover>
 
-        <button
-          aria-expanded={isUserMenuOpen}
-          className="user-button"
-          onClick={onToggleUserMenu}
-          type="button"
-        >
-          <div aria-hidden="true" className="user-avatar-mini"><PersonIllustration compact /></div>
-          <strong>rockittycat</strong>
-          <small>2027 届求职中</small>
-          <LineIcon name="chevron-down" />
-        </button>
-        {isUserMenuOpen && <UserMenu />}
+        <DropdownMenu open={isUserMenuOpen} onOpenChange={onUserMenuOpenChange}>
+          <DropdownMenuTrigger render={<Button className="user-button" type="button" variant="ghost" />}>
+            <Avatar className="user-avatar-mini">
+              <AvatarFallback>R</AvatarFallback>
+            </Avatar>
+            <span className="user-meta">
+              <strong>rockittycat</strong>
+              <small>2027 届求职中</small>
+            </span>
+            <ChevronDown />
+          </DropdownMenuTrigger>
+          <UserMenu />
+        </DropdownMenu>
       </div>
     </header>
   );
 }
 
 function GlobalSearch({
-  inputRef,
-  isActive,
+  isOpen,
   query,
   results,
-  selectedIndex,
   onChange,
   onCommit,
-  onFocus,
-  onKeyDown,
+  onOpenChange,
 }: {
-  inputRef: RefObject<HTMLInputElement | null>;
-  isActive: boolean;
+  isOpen: boolean;
   query: string;
   results: SearchResult[];
-  selectedIndex: number;
   onChange: (value: string) => void;
-  onCommit: (index?: number) => void;
-  onFocus: () => void;
-  onKeyDown: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
+  onCommit: (result?: SearchResult) => void;
+  onOpenChange: (open: boolean) => void;
 }) {
+  const groupedResults = results.reduce<Record<string, SearchResult[]>>((groups, result) => {
+    groups[result.type] = [...(groups[result.type] || []), result];
+    return groups;
+  }, {});
+
   return (
     <div className="global-search">
-      <label>
-        <span aria-hidden="true"><LineIcon name="search" /></span>
-        <input
-          aria-label="全局搜索"
-          onChange={(event) => onChange(event.currentTarget.value)}
-          onFocus={onFocus}
-          onKeyDown={onKeyDown}
-          placeholder="搜索公司、岗位、笔记、日程、待办..."
-          ref={inputRef}
-          value={query}
-        />
-        {query ? <button aria-label="清空搜索" onClick={() => onChange("")} type="button">×</button> : <kbd>⌘ K</kbd>}
-      </label>
-      {isActive && query.trim() && (
-        <div className="search-popover" role="listbox">
-          {results.length === 0 ? (
-            <p>没有找到匹配结果。</p>
-          ) : (
-            results.map((result, index) => (
-              <button
-                aria-selected={selectedIndex === index}
-                className={selectedIndex === index ? "active" : ""}
-                key={result.id}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => onCommit(index)}
-                role="option"
-                type="button"
-              >
-                <span>{result.type}</span>
-                <strong>{result.title}</strong>
-                <small>{result.detail}</small>
-              </button>
-            ))
-          )}
-        </div>
-      )}
+      <Button className="global-search-trigger" onClick={() => onOpenChange(true)} type="button" variant="outline">
+        <Search data-icon="inline-start" />
+        <span>搜索公司、岗位、日程、待办...</span>
+        <kbd>⌘ K</kbd>
+      </Button>
+      <CommandDialog
+        className="global-command-dialog"
+        description="搜索 offercat 中的岗位、投递记录、日程和待办。"
+        onOpenChange={onOpenChange}
+        open={isOpen}
+        showCloseButton
+        title="全局搜索"
+      >
+        <Command shouldFilter={false}>
+          <CommandInput onValueChange={onChange} placeholder="搜索公司、岗位、日程、待办..." value={query} />
+          <CommandList>
+            <CommandEmpty>没有找到匹配结果。</CommandEmpty>
+            {Object.entries(groupedResults).map(([group, items]) => (
+              <CommandGroup heading={group} key={group}>
+                {items.map((result) => (
+                  <CommandItem key={result.id} onSelect={() => onCommit(result)} value={`${result.type}-${result.title}-${result.detail}`}>
+                    <span className="command-result">
+                      <strong>{result.title}</strong>
+                      <small>{result.detail}</small>
+                    </span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ))}
+          </CommandList>
+        </Command>
+      </CommandDialog>
     </div>
   );
 }
@@ -1259,33 +1286,41 @@ function NotificationPanel({
   onNavigate: (view: AppView) => void;
 }) {
   return (
-    <section className="notification-panel" role="dialog" aria-label="近期通知">
-      <div>
-        <strong>近期通知</strong>
-        <button onClick={() => onNavigate("Offer 日历")} type="button">查看全部</button>
-      </div>
+    <PopoverContent align="end" className="notification-panel" sideOffset={12}>
+      <PopoverHeader>
+        <PopoverTitle>近期通知</PopoverTitle>
+        <PopoverDescription>临近节点、逾期事项和待跟进动作。</PopoverDescription>
+      </PopoverHeader>
+      <Button onClick={() => onNavigate("Offer 日历")} size="sm" type="button" variant="outline">查看全部</Button>
       {notifications.length === 0 ? (
         <p>暂无临近节点。</p>
       ) : (
         notifications.slice(0, 5).map((item) => (
-          <button key={item.id} onClick={() => onNavigate(item.view)} type="button">
+          <Button className="notification-row" key={item.id} onClick={() => onNavigate(item.view)} type="button" variant="ghost">
             <span className={`reminder-dot reminder-dot--${item.color}`} />
             <strong>{item.title}</strong>
-            <small>{item.dateLabel} · {item.distance}</small>
-          </button>
+            <small>{item.dateLabel} / {item.distance}</small>
+          </Button>
         ))
       )}
-    </section>
+    </PopoverContent>
   );
 }
 
 function UserMenu() {
   return (
-    <section className="user-menu" role="menu" aria-label="用户菜单">
-      {["个人资料", "数据设置", "账号设置", "退出登录"].map((item) => (
-        <button key={item} role="menuitem" type="button">{item}</button>
-      ))}
-    </section>
+    <DropdownMenuContent align="end" className="user-menu" sideOffset={10}>
+      <DropdownMenuLabel>账户</DropdownMenuLabel>
+      <DropdownMenuGroup>
+        {["个人资料", "数据设置", "账号设置"].map((item) => (
+          <DropdownMenuItem key={item}>{item}</DropdownMenuItem>
+        ))}
+      </DropdownMenuGroup>
+      <Separator />
+      <DropdownMenuGroup>
+        <DropdownMenuItem variant="destructive">退出登录</DropdownMenuItem>
+      </DropdownMenuGroup>
+    </DropdownMenuContent>
   );
 }
 
@@ -1341,15 +1376,20 @@ function MetricCard({
   metric: DashboardMetric;
   onClick: () => void;
 }) {
+  const Icon = metric.icon;
+  const isNegative = metric.helper.includes("-");
+
   return (
-    <button className={`dashboard-card metric-card metric-card--${metric.color}`} onClick={onClick} type="button">
-      <span aria-hidden="true" className="metric-icon"><LineIcon name={metric.icon} /></span>
-      <span className="metric-copy">
-        <small>{metric.label}</small>
-        {isLoading ? <span className="skeleton-line skeleton-line--number" /> : <strong>{metric.value}</strong>}
-        <em>{metric.helper}</em>
-      </span>
-    </button>
+    <Card className={`dashboard-card metric-card metric-card--${metric.color}`}>
+      <Button className="metric-card-button" onClick={onClick} type="button" variant="ghost">
+        <span aria-hidden="true" className="metric-icon"><Icon /></span>
+        <span className="metric-copy">
+          <small>{metric.label}</small>
+          {isLoading ? <Skeleton className="skeleton-line skeleton-line--number" /> : <strong>{metric.value}</strong>}
+          <Badge data-trend={isNegative ? "down" : "up"} variant="secondary">{metric.helper}</Badge>
+        </span>
+      </Button>
+    </Card>
   );
 }
 
@@ -1372,21 +1412,26 @@ function ApplicationTrendChart({
   const path = chartPoints.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
   const areaPath = chartPoints.length > 0 ? `${path} L ${chartPoints[chartPoints.length - 1].x} 226 L ${chartPoints[0].x} 226 Z` : "";
   const yTicks = [0, 10, 20, 30, 40, 50];
+  const total = points.reduce((sum, point) => sum + point.value, 0);
+  const average = Math.round(total / Math.max(points.length, 1));
 
   return (
-    <section className="dashboard-card trend-card">
-      <div className="card-heading">
+    <Card className="dashboard-card trend-card">
+      <CardHeader className="card-heading">
         <div>
-          <h2>近期投递趋势</h2>
-          <p><span className="legend-dot" /> 投递数</p>
+          <CardTitle>近期投递趋势</CardTitle>
+          <CardDescription>当前周期 {total} 次投递，平均每周 {average} 次。</CardDescription>
         </div>
+        <CardAction>
         <select aria-label="趋势时间范围" onChange={(event) => onRangeChange(event.currentTarget.value as TrendRange)} value={range}>
           {trendRanges.map((item) => (
             <option key={item.value} value={item.value}>{item.label}</option>
           ))}
         </select>
-      </div>
-      <div className="trend-chart">
+        </CardAction>
+      </CardHeader>
+      <CardContent className="trend-chart">
+        <p className="chart-legend"><span className="legend-dot" /> 投递数</p>
         <svg aria-label="近期投递趋势折线图" role="img" viewBox="0 0 540 270">
           <defs>
             <linearGradient id="trendFill" x1="0" x2="0" y1="0" y2="1">
@@ -1415,8 +1460,8 @@ function ApplicationTrendChart({
             <text className="x-label" key={`x-${point.label}`} x={point.x} y="252">{point.label}</text>
           ))}
         </svg>
-      </div>
-    </section>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1428,24 +1473,24 @@ function RecruitmentPipeline({
   onStatusClick: (status: string) => void;
 }) {
   return (
-    <section className="dashboard-card pipeline-card">
-      <div className="card-heading">
+    <Card className="dashboard-card pipeline-card">
+      <CardHeader className="card-heading">
         <div>
-          <h2>求职流程总览</h2>
-          <p>状态占比按当前投递记录计算。</p>
+          <CardTitle>求职流程总览</CardTitle>
+          <CardDescription>状态占比按当前投递记录计算。</CardDescription>
         </div>
-      </div>
-      <div className="pipeline-list">
+      </CardHeader>
+      <CardContent className="pipeline-list">
         {rows.map((row) => (
-          <button className={`pipeline-row pipeline-row--${row.color}`} key={row.status} onClick={() => onStatusClick(row.status)} type="button">
-            <span aria-hidden="true"><LineIcon name={row.icon} /></span>
+          <Button className={`pipeline-row pipeline-row--${row.color}`} key={row.status} onClick={() => onStatusClick(row.status)} type="button" variant="ghost">
+            <span aria-hidden="true"><row.icon /></span>
             <strong>{row.label}</strong>
             <em>{row.count}</em>
-            <small>{row.percent}%</small>
-          </button>
+            <Badge variant="secondary">{row.percent}%</Badge>
+          </Button>
         ))}
-      </div>
-    </section>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1457,30 +1502,34 @@ function UpcomingReminderList({
   onNavigate: (view: AppView) => void;
 }) {
   return (
-    <section className="dashboard-card reminders-card">
-      <div className="card-heading">
+    <Card className="dashboard-card reminders-card">
+      <CardHeader className="card-heading">
         <div>
-          <h2>近期提醒</h2>
-          <p>未来节点按时间排序。</p>
+          <CardTitle>近期提醒</CardTitle>
+          <CardDescription>未来节点按时间排序。</CardDescription>
         </div>
-        <button onClick={() => onNavigate("Offer 日历")} type="button">查看全部</button>
-      </div>
+        <CardAction>
+          <Button onClick={() => onNavigate("Offer 日历")} size="sm" type="button" variant="ghost">查看全部</Button>
+        </CardAction>
+      </CardHeader>
       {reminders.length === 0 ? (
         <EmptyState title="暂无近期提醒" description="添加日程、Todo 或下一步截止时间后会显示在这里。" />
       ) : (
-        <div className="reminder-list">
+        <CardContent className="reminder-list">
           {reminders.slice(0, 5).map((reminder) => (
-            <button className={reminder.isOverdue ? "overdue" : ""} key={reminder.id} onClick={() => onNavigate(reminder.view)} type="button">
-              <span className={`reminder-dot reminder-dot--${reminder.color}`}><LineIcon name={reminder.color === "red" ? "alarm" : reminder.color === "green" ? "award" : reminder.color === "cyan" ? "link" : "clipboard"} /></span>
+            <Button className={reminder.isOverdue ? "overdue" : ""} key={reminder.id} onClick={() => onNavigate(reminder.view)} type="button" variant="ghost">
+              <span className={`reminder-dot reminder-dot--${reminder.color}`}><ReminderIcon color={reminder.color} /></span>
               <strong>{reminder.title}</strong>
               <small>{reminder.dateLabel} {reminder.time}</small>
               <em>{reminder.distance}</em>
-            </button>
+            </Button>
           ))}
-        </div>
+        </CardContent>
       )}
-      <button className="add-reminder-button" onClick={() => onNavigate("Offer 日历")} type="button">+ 添加提醒</button>
-    </section>
+      <CardContent>
+        <Button className="add-reminder-button" onClick={() => onNavigate("Offer 日历")} type="button" variant="outline">添加提醒</Button>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1494,28 +1543,28 @@ function CompanyTypeDistribution({
   onNavigate: (view: AppView) => void;
 }) {
   return (
-    <section className="dashboard-card company-type-card">
-      <div className="card-heading">
+    <Card className="dashboard-card company-type-card">
+      <CardHeader className="card-heading">
         <div>
-          <h2>目标公司类型分布</h2>
-          <p>根据岗位库和投递记录实时归类。</p>
+          <CardTitle>目标公司类型分布</CardTitle>
+          <CardDescription>根据岗位库和投递记录实时归类。</CardDescription>
         </div>
-      </div>
-      <div className="company-type-grid">
+      </CardHeader>
+      <CardContent className="company-type-grid">
         {groups.map((group) => (
-          <button className={`company-type company-type--${group.color}`} key={group.label} onClick={() => onCompanyTypeClick(group.key)} type="button">
-            <span aria-hidden="true"><LineIcon name={group.icon} /></span>
+          <Button className={`company-type company-type--${group.color}`} key={group.label} onClick={() => onCompanyTypeClick(group.key)} type="button" variant="ghost">
+            <span aria-hidden="true"><group.icon /></span>
             <strong>{group.label}</strong>
             <em>{group.percent}%</em>
             <small>{group.count} / {group.total}</small>
-          </button>
+          </Button>
         ))}
-      </div>
+      </CardContent>
       <div className="company-card-footer">
         <span>继续投递优质岗位，扩大选择空间。</span>
-        <button onClick={() => onNavigate("求职信息源")} type="button">查看全部公司 →</button>
+        <Button onClick={() => onNavigate("求职信息源")} size="sm" type="button" variant="ghost">查看全部公司</Button>
       </div>
-    </section>
+    </Card>
   );
 }
 
@@ -1525,207 +1574,31 @@ function MotivationCard({
   progress: number;
 }) {
   return (
-    <section className="dashboard-card motivation-card">
+    <Card className="dashboard-card motivation-card">
       <div>
-        <h2>加油，未来可期！</h2>
-        <p>保持节奏，离理想 offer 更近一步。</p>
-        <div className="motivation-progress">
-          <span><i style={{ width: `${progress}%` }} /></span>
-          <small>进度</small>
-          <strong>{progress}%</strong>
-        </div>
-        <blockquote>每一次努力，都是更接近理想的一步。</blockquote>
+        <Badge variant="secondary">本周行动</Badge>
+        <h2>求职进度</h2>
+        <p>保持稳定节奏，优先推进高意向岗位。</p>
+        <Progress aria-label="求职进度" className="motivation-progress" value={progress} />
+        <dl className="weekly-stats">
+          <div><dt>完成度</dt><dd>{progress}%</dd></div>
+          <div><dt>下一步</dt><dd>检查提醒</dd></div>
+        </dl>
       </div>
-      <PersonIllustration className="motivation-figure" />
-    </section>
+      <div aria-hidden="true" className="weekly-orbit">
+        <Target />
+        <CheckCircle2 />
+        <ClipboardList />
+      </div>
+    </Card>
   );
 }
 
-function PersonIllustration({ className = "", compact = false }: { className?: string; compact?: boolean }) {
-  return (
-    <div aria-hidden="true" className={`${className} person-illustration ${compact ? "person-illustration--compact" : ""}`}>
-      <span className="person-bg" />
-      <span className="person-hair" />
-      <span className="person-face" />
-      <span className="person-body" />
-      <span className="person-arm person-arm--left" />
-      <span className="person-arm person-arm--right" />
-      <span className="person-laptop" />
-      <span className="person-book" />
-    </div>
-  );
-}
-
-function LineIcon({ name }: { name: IconName }) {
-  const paths: Record<IconName, ReactNode> = {
-    airplay: (
-      <>
-        <path d="M4 17h16" />
-        <path d="M6 17V8l6-4 6 4v9" />
-        <path d="M9 17v-5h6v5" />
-      </>
-    ),
-    alarm: (
-      <>
-        <circle cx="12" cy="13" r="7" />
-        <path d="M12 9v4l3 2" />
-        <path d="M5 4 3 6" />
-        <path d="M19 4l2 2" />
-      </>
-    ),
-    award: (
-      <>
-        <circle cx="12" cy="9" r="5" />
-        <path d="m9 14-1 7 4-2 4 2-1-7" />
-        <path d="m10.5 9 1 1 2.3-2.6" />
-      </>
-    ),
-    bell: (
-      <>
-        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
-        <path d="M10 21h4" />
-      </>
-    ),
-    bookmark: (
-      <path d="M6 4h12v17l-6-4-6 4z" />
-    ),
-    briefcase: (
-      <>
-        <path d="M4 8h16v11H4z" />
-        <path d="M9 8V5h6v3" />
-        <path d="M4 13h16" />
-      </>
-    ),
-    calendar: (
-      <>
-        <path d="M5 5h14v15H5z" />
-        <path d="M8 3v4" />
-        <path d="M16 3v4" />
-        <path d="M5 10h14" />
-      </>
-    ),
-    chart: (
-      <>
-        <path d="M4 19V5" />
-        <path d="M4 19h16" />
-        <path d="m7 15 4-4 3 3 5-7" />
-      </>
-    ),
-    "check-square": (
-      <>
-        <path d="M5 5h14v14H5z" />
-        <path d="m8 12 3 3 5-6" />
-      </>
-    ),
-    "chevron-down": <path d="m7 10 5 5 5-5" />,
-    clipboard: (
-      <>
-        <path d="M8 5h8" />
-        <path d="M9 3h6v4H9z" />
-        <path d="M6 5h12v16H6z" />
-        <path d="M9 12h6" />
-        <path d="M9 16h4" />
-      </>
-    ),
-    edit: (
-      <>
-        <path d="M5 19h4l10-10-4-4L5 15z" />
-        <path d="m13 7 4 4" />
-      </>
-    ),
-    "file-text": (
-      <>
-        <path d="M6 3h9l3 3v15H6z" />
-        <path d="M14 3v4h4" />
-        <path d="M9 12h6" />
-        <path d="M9 16h6" />
-      </>
-    ),
-    globe: (
-      <>
-        <circle cx="12" cy="12" r="9" />
-        <path d="M3 12h18" />
-        <path d="M12 3c3 3 3 15 0 18" />
-        <path d="M12 3c-3 3-3 15 0 18" />
-      </>
-    ),
-    grid: (
-      <>
-        <path d="M4 4h7v7H4z" />
-        <path d="M13 4h7v7h-7z" />
-        <path d="M4 13h7v7H4z" />
-        <path d="M13 13h7v7h-7z" />
-      </>
-    ),
-    link: (
-      <>
-        <path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1.2 1.2" />
-        <path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1.2-1.2" />
-      </>
-    ),
-    rocket: (
-      <>
-        <path d="M12 15 9 12c1-5 4-8 10-9-1 6-4 9-9 10z" />
-        <path d="M9 12 5 13l3 3 1-4z" />
-        <path d="M12 15v4l3-4" />
-      </>
-    ),
-    search: (
-      <>
-        <circle cx="11" cy="11" r="6" />
-        <path d="m16 16 4 4" />
-      </>
-    ),
-    send: (
-      <>
-        <path d="m21 3-8 18-3-8-8-3z" />
-        <path d="m10 13 11-10" />
-      </>
-    ),
-    shield: (
-      <>
-        <path d="M12 3 5 6v6c0 5 3 8 7 9 4-1 7-4 7-9V6z" />
-        <path d="m9 12 2 2 4-5" />
-      </>
-    ),
-    star: (
-      <path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6-5.4-2.9-5.4 2.9 1-6-4.4-4.3 6.1-.9z" />
-    ),
-    tag: (
-      <>
-        <path d="M4 12 12 4h7v7l-8 8z" />
-        <circle cx="16" cy="8" r="1.2" />
-      </>
-    ),
-    target: (
-      <>
-        <circle cx="12" cy="12" r="9" />
-        <circle cx="12" cy="12" r="5" />
-        <circle cx="12" cy="12" r="1.5" />
-      </>
-    ),
-    todo: (
-      <>
-        <path d="M5 6h14" />
-        <path d="M5 12h14" />
-        <path d="M5 18h10" />
-      </>
-    ),
-    users: (
-      <>
-        <circle cx="9" cy="8" r="3" />
-        <circle cx="16" cy="9" r="2.5" />
-        <path d="M3 19c.7-4 3-6 6-6s5.3 2 6 6" />
-        <path d="M14 14c2.7.2 4.6 1.8 5 5" />
-      </>
-    ),
-  };
-
-  return (
-    <svg aria-hidden="true" className="line-icon" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
-      {paths[name]}
-    </svg>
-  );
+function ReminderIcon({ color }: { color: string }) {
+  if (color === "red") return <AlarmClock />;
+  if (color === "green") return <Award />;
+  if (color === "cyan") return <Link2 />;
+  return <ClipboardList />;
 }
 
 function ViewHeading({
@@ -2884,11 +2757,11 @@ function buildDashboardData({
   return {
     companyTypes: buildCompanyTypeStats(jobs, applications),
     metrics: [
-      { id: "total", label: "总投递数", value: totalApplications, helper: "较上周  ↑ +28", color: "blue", icon: "send", filterStatus: "全部" },
-      { id: "written", label: "笔试中", value: writtenCount, helper: "较上周  ↑ +9", color: "indigo", icon: "edit", filterStatus: "笔试中" },
-      { id: "interview", label: "面试中", value: interviewCount, helper: "较上周  ↓ 6", color: "purple", icon: "users", filterStatus: "面试中" },
-      { id: "offer", label: "Offer", value: offerCount, helper: "较上周  ↑ +2", color: "orange", icon: "award", filterStatus: "Offer" },
-      { id: "follow", label: "待跟进", value: followCount, helper: "较上周  -4 ↓", color: "red", icon: "alarm", filterStatus: "待跟进" },
+      { id: "total", label: "总投递数", value: totalApplications, helper: "暂无对比数据", color: "blue", icon: Send, filterStatus: "全部" },
+      { id: "written", label: "笔试中", value: writtenCount, helper: "暂无对比数据", color: "indigo", icon: NotebookPen, filterStatus: "笔试中" },
+      { id: "interview", label: "面试中", value: interviewCount, helper: "暂无对比数据", color: "purple", icon: UsersRound, filterStatus: "面试中" },
+      { id: "offer", label: "Offer", value: offerCount, helper: "暂无对比数据", color: "orange", icon: Award, filterStatus: "Offer" },
+      { id: "follow", label: "待跟进", value: followCount, helper: "暂无对比数据", color: "red", icon: AlarmClock, filterStatus: "待跟进" },
     ],
     notifications: reminders.filter((reminder) => reminder.isOverdue || reminder.distance === "今天截止" || reminder.distance === "还有 1 天"),
     pipeline: buildPipelineRows({ applications, jobs, totalApplications }),
