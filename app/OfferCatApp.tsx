@@ -78,6 +78,7 @@ type CalendarEventType =
   | "thesis"
   | "todo"
   | "other";
+type CalendarSourceType = "manual" | "todo" | "application" | "system";
 
 type CalendarEvent = {
   id: string;
@@ -88,13 +89,20 @@ type CalendarEvent = {
   category: ScheduleCategoryValue;
   eventType: CalendarEventType;
   source?: string;
+  sourceType?: CalendarSourceType;
+  sourceId?: string;
+  linkedTodoId?: string;
+  linkedApplicationId?: string;
   location?: string;
   description?: string;
   createdAt?: string;
   updatedAt?: string;
 };
 
-type CalendarEventDraft = Omit<CalendarEvent, "id" | "source" | "createdAt" | "updatedAt">;
+type CalendarEventDraft = Omit<
+  CalendarEvent,
+  "id" | "source" | "sourceType" | "sourceId" | "linkedTodoId" | "linkedApplicationId" | "createdAt" | "updatedAt"
+>;
 type CalendarPanelMode = "dayList" | "createEvent" | "eventDetail" | "editEvent";
 type TodoPanelMode = "todoList" | "createTodo" | "editTodo";
 type PendingCalendarAction =
@@ -263,6 +271,7 @@ const navItems = ["职位信息", "信息源", "我的秋招", "Offer日历", "O
 const applicationStorageKey = "offercat-applications-v1";
 const calendarTodoStorageKey = "offercat-calendar-todos-v1";
 const calendarEventStorageKey = "offercat-calendar-events-v1";
+const dismissedCalendarEventStorageKey = "offercat-dismissed-calendar-event-ids-v1";
 const weekdayLabels = ["日", "一", "二", "三", "四", "五", "六"];
 
 const scheduleCategories: Array<{
@@ -330,6 +339,7 @@ const seedCalendarEvents: CalendarEvent[] = [
     category: "job_search",
     eventType: "follow",
     source: "官网巡检",
+    sourceType: "system",
   },
   {
     id: "seed-tencent-written",
@@ -339,6 +349,7 @@ const seedCalendarEvents: CalendarEvent[] = [
     category: "job_search",
     eventType: "written",
     source: "我的任务",
+    sourceType: "system",
   },
   {
     id: "seed-bytedance-interview",
@@ -348,6 +359,7 @@ const seedCalendarEvents: CalendarEvent[] = [
     category: "job_search",
     eventType: "interview",
     source: "面试",
+    sourceType: "system",
   },
   {
     id: "seed-offer-decision",
@@ -357,6 +369,7 @@ const seedCalendarEvents: CalendarEvent[] = [
     category: "job_search",
     eventType: "offer",
     source: "Offer",
+    sourceType: "system",
   },
 ];
 
@@ -387,6 +400,9 @@ export default function OfferCatApp() {
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>(() =>
     readJsonStorage<CalendarEvent[]>(calendarEventStorageKey, [], (items) => items.map(normalizeCalendarEvent)),
   );
+  const [dismissedCalendarEventIds, setDismissedCalendarEventIds] = useState<string[]>(() =>
+    readJsonStorage<string[]>(dismissedCalendarEventStorageKey, []),
+  );
 
   useEffect(() => {
     window.localStorage.setItem(applicationStorageKey, JSON.stringify(applications));
@@ -399,6 +415,10 @@ export default function OfferCatApp() {
   useEffect(() => {
     window.localStorage.setItem(calendarEventStorageKey, JSON.stringify(calendarEvents));
   }, [calendarEvents]);
+
+  useEffect(() => {
+    window.localStorage.setItem(dismissedCalendarEventStorageKey, JSON.stringify(dismissedCalendarEventIds));
+  }, [dismissedCalendarEventIds]);
 
   const cityOptions = useMemo(
     () => ["全部", ...Array.from(new Set(jobs.flatMap((job) => job.city.split(/[、,，/]/)).map((item) => item.trim()).filter(Boolean)))],
@@ -424,6 +444,16 @@ export default function OfferCatApp() {
   });
 
   const activeRecords = applications.filter((item) => item.status !== "已结束");
+  const visibleCalendarEventCount = useMemo(
+    () =>
+      buildVisibleCalendarEvents({
+        applications,
+        customEvents: calendarEvents,
+        dismissedEventIds: dismissedCalendarEventIds,
+        todos: calendarTodos,
+      }).length,
+    [applications, calendarEvents, calendarTodos, dismissedCalendarEventIds],
+  );
 
   function updateJobStatus(jobId: string, status: JobStatus) {
     setJobs((current) => current.map((job) => (job.id === jobId ? { ...job, status } : job)));
@@ -485,6 +515,9 @@ export default function OfferCatApp() {
 
   function removeApplication(id: string) {
     setApplications((current) => current.filter((item) => item.id !== id));
+    setCalendarEvents((current) =>
+      current.filter((event) => event.linkedApplicationId !== id && !(event.sourceType === "application" && event.sourceId === id)),
+    );
   }
 
   function addCalendarEvent(event: CalendarEventDraft) {
@@ -494,6 +527,7 @@ export default function OfferCatApp() {
         ...event,
         id: window.crypto?.randomUUID?.() || `${Date.now()}`,
         source: "手动新建",
+        sourceType: "manual",
         createdAt: timestamp,
         updatedAt: timestamp,
       },
@@ -501,23 +535,42 @@ export default function OfferCatApp() {
     ]);
   }
 
-  function updateCalendarEvent(id: string, event: CalendarEventDraft) {
+  function upsertCalendarEvent(event: CalendarEvent) {
     setCalendarEvents((current) =>
-      current.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              ...event,
-              source: item.source || "手动新建",
-              updatedAt: new Date().toISOString(),
-            }
-          : item,
-      ),
+      current.some((item) => item.id === event.id)
+        ? current.map((item) => (item.id === event.id ? { ...item, ...event, updatedAt: new Date().toISOString() } : item))
+        : [{ ...event, updatedAt: new Date().toISOString() }, ...current],
     );
   }
 
   function removeCalendarEvent(id: string) {
     setCalendarEvents((current) => current.filter((event) => event.id !== id));
+  }
+
+  function dismissCalendarEvent(id: string) {
+    setDismissedCalendarEventIds((current) => Array.from(new Set([id, ...current])));
+    removeCalendarEvent(id);
+  }
+
+  function deleteCalendarEventLinkedSource(event: CalendarEvent) {
+    if (event.sourceType === "todo" && event.linkedTodoId) {
+      removeCalendarTodo(event.linkedTodoId);
+      removeCalendarEvent(event.id);
+      return;
+    }
+
+    if (event.sourceType === "application" && event.linkedApplicationId) {
+      removeApplication(event.linkedApplicationId);
+      removeCalendarEvent(event.id);
+      return;
+    }
+
+    if (event.sourceType === "manual") {
+      removeCalendarEvent(event.id);
+      return;
+    }
+
+    dismissCalendarEvent(event.id);
   }
 
   function updateCalendarTodo(id: string, todo: Omit<CalendarTodo, "id" | "done">) {
@@ -541,6 +594,9 @@ export default function OfferCatApp() {
 
   function removeCalendarTodo(id: string) {
     setCalendarTodos((current) => current.filter((item) => item.id !== id));
+    setCalendarEvents((current) =>
+      current.filter((event) => event.linkedTodoId !== id && !(event.sourceType === "todo" && event.sourceId === id)),
+    );
   }
 
   return (
@@ -584,7 +640,7 @@ export default function OfferCatApp() {
             {activeView === "我的秋招"
               ? `${activeRecords.length} 个进行中`
               : activeView === "Offer日历"
-                ? `${calendarEvents.length + seedCalendarEvents.length + buildApplicationEvents(applications).length} 个日程`
+                ? `${visibleCalendarEventCount} 个日程`
                 : activeView === "Offer Todo"
                 ? `${calendarTodos.filter((todo) => !todo.done).length} 个待办`
                 : `${filteredJobs.length} 个岗位可见`}
@@ -674,10 +730,14 @@ export default function OfferCatApp() {
         {activeView === "Offer日历" && (
           <CalendarPlanner
             applications={applications}
+            todos={calendarTodos}
             customEvents={calendarEvents}
+            dismissedEventIds={dismissedCalendarEventIds}
             onAddEvent={addCalendarEvent}
+            onDeleteLinkedSource={deleteCalendarEventLinkedSource}
+            onDismissEvent={dismissCalendarEvent}
             onRemoveEvent={removeCalendarEvent}
-            onUpdateEvent={updateCalendarEvent}
+            onUpdateEvent={upsertCalendarEvent}
           />
         )}
 
@@ -698,15 +758,23 @@ export default function OfferCatApp() {
 function CalendarPlanner({
   applications,
   customEvents,
+  dismissedEventIds,
   onAddEvent,
+  onDeleteLinkedSource,
+  onDismissEvent,
   onRemoveEvent,
   onUpdateEvent,
+  todos,
 }: {
   applications: ApplicationRecord[];
   customEvents: CalendarEvent[];
+  dismissedEventIds: string[];
   onAddEvent: (event: CalendarEventDraft) => void;
+  onDeleteLinkedSource: (event: CalendarEvent) => void;
+  onDismissEvent: (id: string) => void;
   onRemoveEvent: (id: string) => void;
-  onUpdateEvent: (id: string, event: CalendarEventDraft) => void;
+  onUpdateEvent: (event: CalendarEvent) => void;
+  todos: CalendarTodo[];
 }) {
   const today = useMemo(() => new Date(), []);
   const [visibleMonth, setVisibleMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
@@ -724,11 +792,18 @@ function CalendarPlanner({
   }));
   const [pendingCalendarAction, setPendingCalendarAction] = useState<PendingCalendarAction | null>(null);
   const [eventToDelete, setEventToDelete] = useState<CalendarEvent | null>(null);
+  const [linkedEventToDelete, setLinkedEventToDelete] = useState<CalendarEvent | null>(null);
+  const [calendarNotice, setCalendarNotice] = useState("");
 
-  const applicationEvents = useMemo(() => buildApplicationEvents(applications), [applications]);
   const events = useMemo(
-    () => [...seedCalendarEvents, ...customEvents, ...applicationEvents].map(normalizeCalendarEvent),
-    [applicationEvents, customEvents],
+    () =>
+      buildVisibleCalendarEvents({
+        applications,
+        customEvents,
+        dismissedEventIds,
+        todos,
+      }),
+    [applications, customEvents, dismissedEventIds, todos],
   );
   const calendarDays = useMemo(() => buildCalendarDays(visibleMonth), [visibleMonth]);
   const selectedEvents = sortCalendarEvents(events.filter((event) => event.date === selectedDate));
@@ -741,6 +816,13 @@ function CalendarPlanner({
     count: events.filter((event) => event.category === category.value).length,
   }));
   const isEventFormDirty = (panelMode === "createEvent" || panelMode === "editEvent") && !calendarDraftsEqual(eventDraft, eventDraftBase);
+
+  useEffect(() => {
+    if (!calendarNotice) return;
+
+    const timer = window.setTimeout(() => setCalendarNotice(""), 2800);
+    return () => window.clearTimeout(timer);
+  }, [calendarNotice]);
 
   function shiftMonth(offset: number) {
     setVisibleMonth((current) => new Date(current.getFullYear(), current.getMonth() + offset, 1));
@@ -868,8 +950,12 @@ function CalendarPlanner({
       description: submittedDraft.description?.trim() || "",
     };
 
-    if (panelMode === "editEvent" && activeEventId) {
-      onUpdateEvent(activeEventId, nextEvent);
+    if (panelMode === "editEvent" && activeEvent) {
+      onUpdateEvent({
+        ...activeEvent,
+        ...nextEvent,
+        updatedAt: new Date().toISOString(),
+      });
     } else {
       onAddEvent(nextEvent);
     }
@@ -895,8 +981,13 @@ function CalendarPlanner({
   function deleteActiveEvent() {
     if (!eventToDelete) return;
     setSelectedDate(eventToDelete.date);
-    onRemoveEvent(eventToDelete.id);
+    if (eventToDelete.sourceType === "manual") {
+      onRemoveEvent(eventToDelete.id);
+    } else {
+      onDismissEvent(eventToDelete.id);
+    }
     setEventToDelete(null);
+    setCalendarNotice(eventToDelete.sourceType === "manual" ? "日程已删除。" : "已从日历移除，原始内容仍保留。");
     applyClosePanel();
   }
 
@@ -919,6 +1010,36 @@ function CalendarPlanner({
   function handleEventDeleteFromDetail(event: CalendarEvent) {
     setSelectedDate(event.date);
     confirmDeleteEvent(event);
+  }
+
+  function removeEventFromCalendarOnly(event: CalendarEvent) {
+    setSelectedDate(event.date);
+    if (event.sourceType === "manual") {
+      onRemoveEvent(event.id);
+    } else {
+      onDismissEvent(event.id);
+    }
+    setEventToDelete(null);
+    setCalendarNotice("已从日历移除，原始内容仍保留。");
+    applyClosePanel();
+  }
+
+  function requestDeleteLinkedSource(event: CalendarEvent) {
+    setEventToDelete(null);
+    setLinkedEventToDelete(event);
+  }
+
+  function cancelLinkedDelete() {
+    setLinkedEventToDelete(null);
+  }
+
+  function confirmDeleteLinkedSource() {
+    if (!linkedEventToDelete) return;
+    setSelectedDate(linkedEventToDelete.date);
+    onDeleteLinkedSource(linkedEventToDelete);
+    setLinkedEventToDelete(null);
+    setCalendarNotice("日程及关联内容已删除。");
+    applyClosePanel();
   }
 
   return (
@@ -1008,8 +1129,8 @@ function CalendarPlanner({
           <ScheduleEventDetail
             event={activeEvent}
             onBack={closePanel}
-            onDelete={activeEvent.source === "手动新建" ? () => handleEventDeleteFromDetail(activeEvent) : undefined}
-            onEdit={activeEvent.source === "手动新建" ? () => startEditEvent(activeEvent) : undefined}
+            onDelete={() => handleEventDeleteFromDetail(activeEvent)}
+            onEdit={() => startEditEvent(activeEvent)}
           />
         ) : (
           <SelectedDayEvents
@@ -1020,6 +1141,7 @@ function CalendarPlanner({
           />
         )}
       </aside>
+      {calendarNotice && <p className="calendar-toast" role="status">{calendarNotice}</p>}
 
       {pendingCalendarAction && (
         <ConfirmDialog
@@ -1033,14 +1155,35 @@ function CalendarPlanner({
       )}
 
       {eventToDelete && (
+        eventHasLinkedSource(eventToDelete) ? (
+          <DeleteLinkedEventDialog
+            event={eventToDelete}
+            onCancel={cancelDeleteEvent}
+            onDeleteLinked={() => requestDeleteLinkedSource(eventToDelete)}
+            onRemoveOnly={() => removeEventFromCalendarOnly(eventToDelete)}
+          />
+        ) : (
+          <ConfirmDialog
+            cancelLabel="取消"
+            confirmLabel="确认删除"
+            danger
+            message="确定删除该日程吗？删除后无法恢复。"
+            onCancel={cancelDeleteEvent}
+            onConfirm={deleteActiveEvent}
+            title="删除日程"
+          />
+        )
+      )}
+
+      {linkedEventToDelete && (
         <ConfirmDialog
           cancelLabel="取消"
           confirmLabel="确认删除"
           danger
-          message="确定删除该日程吗？删除后无法恢复。"
-          onCancel={cancelDeleteEvent}
-          onConfirm={deleteActiveEvent}
-          title="删除日程"
+          message={`确定同时删除${sourceTypeLabel(linkedEventToDelete.sourceType)}中的关联内容吗？删除后无法恢复。`}
+          onCancel={cancelLinkedDelete}
+          onConfirm={confirmDeleteLinkedSource}
+          title="删除关联内容"
         />
       )}
     </section>
@@ -1150,7 +1293,7 @@ function ScheduleEventDetail({
       </dl>
 
       <div className="panel-actions">
-        {onEdit ? <button className="secondary-button" onClick={onEdit} type="button">编辑</button> : <small>自动生成日程暂不支持直接编辑。</small>}
+        {onEdit && <button className="secondary-button" onClick={onEdit} type="button">编辑</button>}
         {onDelete && <button className="danger-button" onClick={onDelete} type="button">删除</button>}
       </div>
     </div>
@@ -1660,9 +1803,61 @@ function ConfirmDialog({
   );
 }
 
+function DeleteLinkedEventDialog({
+  event,
+  onCancel,
+  onDeleteLinked,
+  onRemoveOnly,
+}: {
+  event: CalendarEvent;
+  onCancel: () => void;
+  onDeleteLinked: () => void;
+  onRemoveOnly: () => void;
+}) {
+  const sourceLabel = sourceTypeLabel(event.sourceType);
+
+  useEffect(() => {
+    function handleKeyDown(keyboardEvent: KeyboardEvent) {
+      if (keyboardEvent.key === "Escape") onCancel();
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onCancel]);
+
+  return (
+    <div
+      className="confirm-dialog-backdrop"
+      onMouseDown={(mouseEvent) => {
+        if (mouseEvent.target === mouseEvent.currentTarget) onCancel();
+      }}
+    >
+      <section aria-modal="true" className="confirm-dialog delete-scope-dialog" role="dialog">
+        <h3>删除该日程</h3>
+        <p>该日程由 {sourceLabel} 自动生成。请选择删除方式。</p>
+        <div className="delete-scope-summary">
+          <strong>{event.title}</strong>
+          <span>{formatDateLabel(event.date)} {event.startTime || "全天"}</span>
+        </div>
+        <div className="delete-scope-actions">
+          <button onClick={onCancel} type="button">取消</button>
+          <button onClick={onRemoveOnly} type="button">仅从日历中移除</button>
+          <button className="danger-button" onClick={onDeleteLinked} type="button">同时删除关联内容</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function buildApplicationEvents(applications: ApplicationRecord[]): CalendarEvent[] {
   return applications.flatMap((record) => {
     const events: CalendarEvent[] = [];
+    const sourceFields = {
+      sourceType: "application" as const,
+      sourceId: record.id,
+      linkedApplicationId: record.id,
+    };
+
     if (record.nextDeadline) {
       events.push({
         id: `${record.id}-next`,
@@ -1672,6 +1867,7 @@ function buildApplicationEvents(applications: ApplicationRecord[]): CalendarEven
         category: "job_search",
         eventType: record.interview !== "未开始" ? "interview" : "follow",
         source: "我的秋招",
+        ...sourceFields,
       });
     }
     if (record.offerDeadline) {
@@ -1683,6 +1879,7 @@ function buildApplicationEvents(applications: ApplicationRecord[]): CalendarEven
         category: "job_search",
         eventType: "offer",
         source: "Offer",
+        ...sourceFields,
       });
     }
     if (record.applyDate) {
@@ -1694,10 +1891,56 @@ function buildApplicationEvents(applications: ApplicationRecord[]): CalendarEven
         category: "job_search",
         eventType: "todo",
         source: record.channel,
+        ...sourceFields,
       });
     }
     return events;
   });
+}
+
+function buildTodoEvents(todos: CalendarTodo[]): CalendarEvent[] {
+  return todos.map((todo) => {
+    const normalizedTodo = normalizeTodo(todo);
+    return {
+      id: `todo-${normalizedTodo.id}`,
+      title: normalizedTodo.title,
+      date: normalizedTodo.due,
+      startTime: "09:00",
+      category: categoryFromLegacyKind(normalizedTodo.kind),
+      eventType: normalizeEventType(normalizedTodo.kind),
+      source: "Todo",
+      sourceType: "todo",
+      sourceId: normalizedTodo.id,
+      linkedTodoId: normalizedTodo.id,
+      description: `${priorityLabel(normalizedTodo.priority)} · ${normalizedTodo.done ? "已完成" : "未完成"} · ${normalizedTodo.owner}`,
+    };
+  });
+}
+
+function buildVisibleCalendarEvents({
+  applications,
+  customEvents,
+  dismissedEventIds,
+  todos,
+}: {
+  applications: ApplicationRecord[];
+  customEvents: CalendarEvent[];
+  dismissedEventIds: string[];
+  todos: CalendarTodo[];
+}) {
+  const dismissedIds = new Set(dismissedEventIds);
+  const normalizedCustomEvents = customEvents.map(normalizeCalendarEvent);
+  const customEventIds = new Set(normalizedCustomEvents.map((event) => event.id));
+  const generatedEvents = [
+    ...seedCalendarEvents,
+    ...buildApplicationEvents(applications),
+    ...buildTodoEvents(todos),
+  ].map(normalizeCalendarEvent);
+
+  return [
+    ...generatedEvents.filter((event) => !customEventIds.has(event.id)),
+    ...normalizedCustomEvents,
+  ].filter((event) => !dismissedIds.has(event.id));
 }
 
 function buildCalendarDays(month: Date) {
@@ -1740,6 +1983,7 @@ function normalizeCalendarEvent(event: Partial<CalendarEvent> & { kind?: Calenda
   const legacyKind = event.kind || "todo";
   const eventType = normalizeEventType(event.eventType || legacyKind);
   const category = normalizeCategory(event.category || categoryFromLegacyKind(legacyKind));
+  const sourceType = normalizeSourceType(event.sourceType, event.source);
 
   return {
     id: event.id || `${event.title || "event"}-${event.date || Date.now()}`,
@@ -1750,11 +1994,23 @@ function normalizeCalendarEvent(event: Partial<CalendarEvent> & { kind?: Calenda
     category,
     eventType,
     source: event.source,
+    sourceType,
+    sourceId: event.sourceId,
+    linkedTodoId: event.linkedTodoId,
+    linkedApplicationId: event.linkedApplicationId,
     location: event.location || "",
     description: event.description || "",
     createdAt: event.createdAt,
     updatedAt: event.updatedAt,
   };
+}
+
+function normalizeSourceType(sourceType?: string, source?: string): CalendarSourceType {
+  if (sourceType === "manual" || sourceType === "todo" || sourceType === "application" || sourceType === "system") {
+    return sourceType;
+  }
+  if (source === "手动新建") return "manual";
+  return "system";
 }
 
 function normalizeCategory(category: string): ScheduleCategoryValue {
@@ -1765,6 +2021,20 @@ function normalizeCategory(category: string): ScheduleCategoryValue {
 function normalizeEventType(eventType: string): CalendarEventType {
   if (eventTypeOptions.some((option) => option.value === eventType)) return eventType as CalendarEventType;
   return "other";
+}
+
+function eventHasLinkedSource(event: CalendarEvent) {
+  return Boolean(
+    (event.sourceType === "todo" && event.linkedTodoId) ||
+    (event.sourceType === "application" && event.linkedApplicationId),
+  );
+}
+
+function sourceTypeLabel(sourceType?: CalendarSourceType) {
+  if (sourceType === "todo") return "Todo";
+  if (sourceType === "application") return "求职流程";
+  if (sourceType === "system") return "系统自动生成";
+  return "手动创建";
 }
 
 function categoryFromLegacyKind(kind: CalendarEventKind): ScheduleCategoryValue {
