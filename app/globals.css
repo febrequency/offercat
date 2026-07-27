@@ -6311,3 +6311,84 @@ textarea:focus-visible {
     @apply font-sans;
   }
 }
+
+/* Wide-screen fill pass: keep the dashboard anchored to the sidebar and use the full canvas. */
+.dashboard-workspace {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 32px clamp(30px, 2.4vw, 56px) 34px;
+}
+
+.dashboard-topbar {
+  grid-template-columns: minmax(320px, 1fr) minmax(420px, 520px) auto;
+  width: 100%;
+  gap: clamp(20px, 1.8vw, 34px);
+}
+
+.overview-grid {
+  width: 100%;
+  grid-template-columns: minmax(0, 1.55fr) minmax(340px, 0.9fr) minmax(390px, 1fr);
+  gap: clamp(18px, 1.45vw, 28px);
+}
+
+.metric-grid {
+  width: 100%;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: clamp(16px, 1.15vw, 24px);
+}
+
+.metric-card,
+.metric-card-button {
+  min-height: 136px;
+}
+
+.trend-card,
+.pipeline-card,
+.reminders-card {
+  height: clamp(360px, 35vh, 430px);
+  min-height: 360px;
+}
+
+.trend-chart svg {
+  height: clamp(244px, 24vh, 300px);
+}
+
+.company-type-card,
+.motivation-card {
+  height: clamp(230px, 22vh, 286px);
+  min-height: 230px;
+}
+
+.company-type-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: clamp(12px, 1vw, 20px);
+}
+
+.company-type {
+  min-height: 104px;
+}
+
+.weekly-orbit {
+  justify-self: end;
+  width: clamp(112px, 7.4vw, 144px);
+  height: clamp(112px, 7.4vw, 144px);
+}
+
+@media (min-width: 1680px) {
+  .dashboard-sidebar {
+    width: 256px;
+  }
+
+  .dashboard-shell {
+    grid-template-columns: 256px minmax(0, 1fr);
+  }
+
+  .dashboard-shell:has(.dashboard-sidebar[data-collapsed="true"]) {
+    grid-template-columns: 92px minmax(0, 1fr);
+  }
+
+  .dashboard-sidebar[data-collapsed="true"] {
+    width: 92px;
+  }
+}
