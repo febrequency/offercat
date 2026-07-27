@@ -1,6 +1,7 @@
 "use client";
 
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
+import { type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type JobStatus = "待投递" | "收藏中" | "已投递" | "面试中";
 
@@ -105,6 +106,8 @@ type CalendarEventDraft = Omit<
 >;
 type CalendarPanelMode = "dayList" | "createEvent" | "eventDetail" | "editEvent";
 type TodoPanelMode = "todoList" | "createTodo" | "editTodo";
+type AppView = "求职大盘" | "求职信息源" | "Offer 跟进" | "Offer 日历" | "Offer To Do";
+type TrendRange = "4w" | "8w" | "12w" | "6m" | "year";
 type PendingCalendarAction =
   | { type: "close" }
   | { type: "selectDay"; dateKey: string }
@@ -120,6 +123,70 @@ type CalendarTodo = {
   done: boolean;
   priority: "P0" | "P1" | "P2" | "P3";
   owner: string;
+};
+
+type DashboardMetric = {
+  id: string;
+  label: string;
+  value: number;
+  helper: string;
+  color: string;
+  icon: string;
+  filterStatus: string;
+};
+
+type TrendPoint = {
+  label: string;
+  value: number;
+};
+
+type PipelineRow = {
+  status: string;
+  label: string;
+  count: number;
+  percent: number;
+  color: string;
+  icon: string;
+};
+
+type DashboardReminder = {
+  id: string;
+  title: string;
+  date: string;
+  dateLabel: string;
+  time: string;
+  distance: string;
+  color: string;
+  isOverdue: boolean;
+  view: AppView;
+};
+
+type CompanyTypeStat = {
+  key: string;
+  label: string;
+  count: number;
+  total: number;
+  percent: number;
+  color: string;
+  icon: string;
+};
+
+type SearchResult = {
+  id: string;
+  title: string;
+  detail: string;
+  type: string;
+  view: AppView;
+};
+
+type DashboardData = {
+  companyTypes: CompanyTypeStat[];
+  metrics: DashboardMetric[];
+  notifications: DashboardReminder[];
+  pipeline: PipelineRow[];
+  progress: number;
+  reminders: DashboardReminder[];
+  trendPoints: TrendPoint[];
 };
 
 const blankApplication: ApplicationRecord = {
@@ -267,12 +334,55 @@ const sourceLinks: SourceLink[] = [
   },
 ];
 
-const navItems = ["职位信息", "信息源", "我的秋招", "Offer日历", "Offer Todo"] as const;
+const navItems: Array<{
+  id: AppView;
+  label: string;
+  hint: string;
+  icon: string;
+}> = [
+  { id: "求职大盘", label: "求职大盘", hint: "全局进展", icon: "D" },
+  { id: "求职信息源", label: "求职信息源", hint: "岗位与来源", icon: "S" },
+  { id: "Offer 跟进", label: "Offer 跟进", hint: "投递记录", icon: "F" },
+  { id: "Offer 日历", label: "Offer 日历", hint: "日程节点", icon: "C" },
+  { id: "Offer To Do", label: "Offer To Do", hint: "待办清单", icon: "T" },
+];
 const applicationStorageKey = "offercat-applications-v1";
 const calendarTodoStorageKey = "offercat-calendar-todos-v1";
 const calendarEventStorageKey = "offercat-calendar-events-v1";
 const dismissedCalendarEventStorageKey = "offercat-dismissed-calendar-event-ids-v1";
 const weekdayLabels = ["日", "一", "二", "三", "四", "五", "六"];
+const trendRanges: Array<{ value: TrendRange; label: string; weeks: number }> = [
+  { value: "4w", label: "近 4 周", weeks: 4 },
+  { value: "8w", label: "近 8 周", weeks: 8 },
+  { value: "12w", label: "近 12 周", weeks: 12 },
+  { value: "6m", label: "近 6 个月", weeks: 26 },
+  { value: "year", label: "本年度", weeks: 52 },
+];
+
+const companyTypeGroups = [
+  { key: "互联网", label: "互联网", color: "blue", match: ["互联网", "民营企业"] },
+  { key: "外企", label: "外企", color: "teal", match: ["外企"] },
+  { key: "央国企", label: "央国企", color: "orange", match: ["央国企", "国企"] },
+  { key: "AI / 机器人", label: "AI / 机器人", color: "purple", match: ["AI", "机器人", "自动驾驶", "智能"] },
+  { key: "品牌方", label: "品牌方", color: "violet", match: ["品牌", "消费", "内容"] },
+  { key: "其他", label: "其他", color: "slate", match: [] },
+];
+
+const statusVisuals = [
+  { key: "收藏中", label: "已收藏", color: "blue" },
+  { key: "已投递", label: "已投递", color: "cyan" },
+  { key: "笔试中", label: "笔试中", color: "violet" },
+  { key: "面试中", label: "面试中", color: "orange" },
+  { key: "Offer", label: "Offer", color: "green" },
+  { key: "已结束", label: "已结束", color: "slate" },
+];
+
+const dailyTips = [
+  "今天优先确认临近截止的网申和测评。",
+  "面试前把 JD、项目经历和复盘材料放在同一处。",
+  "每次投递后记录渠道和简历版本，后面复盘会轻松很多。",
+  "对高意向岗位设置下一步提醒，避免信息散在聊天记录里。",
+];
 
 const scheduleCategories: Array<{
   value: ScheduleCategoryValue;
@@ -385,12 +495,21 @@ const blankCalendarEvent: CalendarEventDraft = {
 };
 
 export default function OfferCatApp() {
-  const [activeView, setActiveView] = useState<(typeof navItems)[number]>("职位信息");
+  const [activeView, setActiveView] = useState<AppView>("求职大盘");
   const [jobs, setJobs] = useState<Job[]>(initialJobs);
   const [query, setQuery] = useState("");
+  const [globalQuery, setGlobalQuery] = useState("");
+  const [isSearchActive, setIsSearchActive] = useState(false);
+  const [selectedSearchIndex, setSelectedSearchIndex] = useState(0);
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [trendRange, setTrendRange] = useState<TrendRange>("8w");
+  const [isDashboardLoading, setIsDashboardLoading] = useState(true);
   const [city, setCity] = useState("全部");
   const [batch, setBatch] = useState("全部");
   const [tag, setTag] = useState("全部");
+  const [companyKind, setCompanyKind] = useState("全部");
+  const [applicationFilter, setApplicationFilter] = useState("全部");
   const [form, setForm] = useState<ApplicationRecord>(blankApplication);
   const [applications, setApplications] = useState<ApplicationRecord[]>(() => readJsonStorage(applicationStorageKey, []));
   const [formMessage, setFormMessage] = useState("");
@@ -403,6 +522,7 @@ export default function OfferCatApp() {
   const [dismissedCalendarEventIds, setDismissedCalendarEventIds] = useState<string[]>(() =>
     readJsonStorage<string[]>(dismissedCalendarEventStorageKey, []),
   );
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     window.localStorage.setItem(applicationStorageKey, JSON.stringify(applications));
@@ -420,6 +540,25 @@ export default function OfferCatApp() {
     window.localStorage.setItem(dismissedCalendarEventStorageKey, JSON.stringify(dismissedCalendarEventIds));
   }, [dismissedCalendarEventIds]);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => setIsDashboardLoading(false), 220);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const isCommandK = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k";
+      if (!isCommandK) return;
+
+      event.preventDefault();
+      setIsSearchActive(true);
+      searchInputRef.current?.focus();
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   const cityOptions = useMemo(
     () => ["全部", ...Array.from(new Set(jobs.flatMap((job) => job.city.split(/[、,，/]/)).map((item) => item.trim()).filter(Boolean)))],
     [jobs],
@@ -428,6 +567,11 @@ export default function OfferCatApp() {
   const tagOptions = useMemo(
     () => ["全部", ...Array.from(new Set(jobs.flatMap((job) => job.tags)))],
     [jobs],
+  );
+
+  const companyKindOptions = useMemo(
+    () => ["全部", ...Array.from(new Set([...jobs.map((job) => job.companyType), ...applications.map((record) => record.companyType)].filter(Boolean)))],
+    [applications, jobs],
   );
 
   const filteredJobs = jobs.filter((job) => {
@@ -439,20 +583,35 @@ export default function OfferCatApp() {
       (!query || haystack.includes(query.toLowerCase())) &&
       (city === "全部" || job.city.includes(city)) &&
       (batch === "全部" || job.batch === batch) &&
-      (tag === "全部" || job.tags.includes(tag))
+      (tag === "全部" || job.tags.includes(tag)) &&
+      (companyKind === "全部" || job.companyType === companyKind)
     );
   });
 
-  const activeRecords = applications.filter((item) => item.status !== "已结束");
-  const visibleCalendarEventCount = useMemo(
+  const visibleCalendarEvents = useMemo(
     () =>
       buildVisibleCalendarEvents({
         applications,
         customEvents: calendarEvents,
         dismissedEventIds: dismissedCalendarEventIds,
         todos: calendarTodos,
-      }).length,
+      }),
     [applications, calendarEvents, calendarTodos, dismissedCalendarEventIds],
+  );
+  const visibleCalendarEventCount = visibleCalendarEvents.length;
+  const dashboardData = useMemo(
+    () => buildDashboardData({ applications, events: visibleCalendarEvents, jobs, todos: calendarTodos, trendRange }),
+    [applications, calendarTodos, jobs, trendRange, visibleCalendarEvents],
+  );
+  const searchResults = useMemo(
+    () => buildSearchResults({
+      applications,
+      events: visibleCalendarEvents,
+      jobs,
+      query: globalQuery,
+      todos: calendarTodos,
+    }),
+    [applications, calendarTodos, globalQuery, jobs, visibleCalendarEvents],
   );
 
   function updateJobStatus(jobId: string, status: JobStatus) {
@@ -599,56 +758,119 @@ export default function OfferCatApp() {
     );
   }
 
+  function navigateToView(view: AppView) {
+    setActiveView(view);
+    setIsNotificationOpen(false);
+    setIsUserMenuOpen(false);
+  }
+
+  function openApplicationStatus(status: string) {
+    setApplicationFilter(status);
+    navigateToView("Offer 跟进");
+  }
+
+  function openCompanyTypeFilter(companyType: string) {
+    setCompanyKind(companyType === "互联网" ? "民营企业" : companyType);
+    navigateToView("求职信息源");
+  }
+
+  function clearJobFilters() {
+    setQuery("");
+    setCity("全部");
+    setBatch("全部");
+    setTag("全部");
+    setCompanyKind("全部");
+  }
+
+  function handleSearchCommit(index = selectedSearchIndex) {
+    const result = searchResults[index] || searchResults[0];
+    if (!result) return;
+
+    navigateToView(result.view);
+    if (result.view === "求职信息源") setQuery(result.title);
+    if (result.view === "Offer 跟进") setApplicationFilter("全部");
+    setIsSearchActive(false);
+  }
+
+  function handleSearchKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setSelectedSearchIndex((current) => Math.min(current + 1, Math.max(searchResults.length - 1, 0)));
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setSelectedSearchIndex((current) => Math.max(current - 1, 0));
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      handleSearchCommit();
+      return;
+    }
+    if (event.key === "Escape") {
+      setIsSearchActive(false);
+    }
+  }
+
   return (
-    <main className="site-shell">
-      <header className="site-header">
-        <button className="brand" onClick={() => setActiveView("职位信息")} type="button">
-          <img src="/assets/offercat-mark.svg" alt="" />
-          <span>
-            <strong>offercat</strong>
-            秋招信息工作台
-          </span>
-        </button>
-        <nav aria-label="主导航">
-          {navItems.map((item) => (
-            <button
-              className={activeView === item ? "active" : ""}
-              key={item}
-              onClick={() => setActiveView(item)}
-              type="button"
-            >
-              {item}
-            </button>
-          ))}
-        </nav>
-        <input
-          aria-label="搜索公司或岗位"
-          className="header-search"
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="搜索公司或岗位"
-          value={query}
+    <main className="dashboard-shell">
+      <DashboardSidebar
+        activeView={activeView}
+        navItems={navItems}
+        onNavigate={navigateToView}
+        tip={dailyTips[new Date().getDate() % dailyTips.length]}
+      />
+
+      <section className="dashboard-workspace">
+        <DashboardHeader
+          activeView={activeView}
+          dashboardData={dashboardData}
+          globalQuery={globalQuery}
+          isNotificationOpen={isNotificationOpen}
+          isSearchActive={isSearchActive}
+          isUserMenuOpen={isUserMenuOpen}
+          searchInputRef={searchInputRef}
+          searchResults={searchResults}
+          selectedSearchIndex={selectedSearchIndex}
+          onNavigate={navigateToView}
+          onSearchChange={(value) => {
+            setGlobalQuery(value);
+            setSelectedSearchIndex(0);
+            setIsSearchActive(true);
+          }}
+          onSearchCommit={handleSearchCommit}
+          onSearchFocus={() => setIsSearchActive(true)}
+          onSearchKeyDown={handleSearchKeyDown}
+          onToggleNotifications={() => {
+            setIsNotificationOpen((current) => !current);
+            setIsUserMenuOpen(false);
+          }}
+          onToggleUserMenu={() => {
+            setIsUserMenuOpen((current) => !current);
+            setIsNotificationOpen(false);
+          }}
         />
-      </header>
 
-      <section className="workspace-panel">
-        <div className="section-bar">
-          <div>
-            <span>Workspace</span>
-            <h2>{activeView}</h2>
-          </div>
-          <strong>
-            {activeView === "我的秋招"
-              ? `${activeRecords.length} 个进行中`
-              : activeView === "Offer日历"
-                ? `${visibleCalendarEventCount} 个日程`
-                : activeView === "Offer Todo"
-                ? `${calendarTodos.filter((todo) => !todo.done).length} 个待办`
-                : `${filteredJobs.length} 个岗位可见`}
-          </strong>
-        </div>
+        {activeView === "求职大盘" && (
+          <DashboardOverview
+            data={dashboardData}
+            isLoading={isDashboardLoading}
+            trendRange={trendRange}
+            onCompanyTypeClick={openCompanyTypeFilter}
+            onNavigate={navigateToView}
+            onStatusClick={openApplicationStatus}
+            onTrendRangeChange={setTrendRange}
+          />
+        )}
 
-        {activeView === "职位信息" && (
+        {activeView === "求职信息源" && (
           <>
+            <ViewHeading
+              count={`${filteredJobs.length} 个岗位可见`}
+              subtitle="集中管理官网巡检岗位、腾讯文档信息源和后续可同步入口。"
+              title="求职信息源"
+            />
             <section className="filters" aria-label="职位筛选">
               <label>
                 搜索
@@ -682,40 +904,45 @@ export default function OfferCatApp() {
                   ))}
                 </select>
               </label>
-              <button onClick={() => { setQuery(""); setCity("全部"); setBatch("全部"); setTag("全部"); }} type="button">
+              <label>
+                公司类型
+                <select onChange={(event) => setCompanyKind(event.target.value)} value={companyKind}>
+                  {companyKindOptions.map((option) => (
+                    <option key={option}>{option}</option>
+                  ))}
+                </select>
+              </label>
+              <button onClick={clearJobFilters} type="button">
                 清空筛选
               </button>
             </section>
             <JobsTable jobs={filteredJobs} onStatusChange={updateJobStatus} />
+
+            <section className="source-area source-area--embedded">
+              <div className="source-intro">
+                <span>Source center</span>
+                <h3>外部信息源先稳定收口。</h3>
+                <p>
+                  当前保留入口和清洗说明；后续导出规则稳定后，再接成自动同步。
+                </p>
+                <button onClick={importOfficialSignals} type="button">导入已有官网巡检结果</button>
+              </div>
+              <div className="source-grid">
+                {sourceLinks.map((source) => (
+                  <article className="source-card" key={source.id}>
+                    <span>{source.region}</span>
+                    <h3>{source.name}</h3>
+                    <strong>{source.status}</strong>
+                    <p>{source.note}</p>
+                    <a href={source.url} rel="noreferrer" target="_blank">打开信息源</a>
+                  </article>
+                ))}
+              </div>
+            </section>
           </>
         )}
 
-        {activeView === "信息源" && (
-          <section className="source-area">
-            <div className="source-intro">
-              <span>Source center</span>
-              <h3>先把三个外部信息源安稳放在这里。</h3>
-              <p>
-                这一步不强行抓取不稳定数据，先给每个来源留下入口、定位和后续清洗说明。
-                后面能导出时，再接成自动同步。
-              </p>
-              <button onClick={importOfficialSignals} type="button">导入已有官网巡检结果</button>
-            </div>
-            <div className="source-grid">
-              {sourceLinks.map((source) => (
-                <article className="source-card" key={source.id}>
-                  <span>{source.region}</span>
-                  <h3>{source.name}</h3>
-                  <strong>{source.status}</strong>
-                  <p>{source.note}</p>
-                  <a href={source.url} rel="noreferrer" target="_blank">打开信息源</a>
-                </article>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {activeView === "我的秋招" && (
+        {activeView === "Offer 跟进" && (
           <section className="application-area">
             <ApplicationForm
               form={form}
@@ -723,11 +950,22 @@ export default function OfferCatApp() {
               onChange={updateForm}
               onSubmit={submitApplication}
             />
-            <ApplicationRecords records={applications} onRemove={removeApplication} />
+            <ApplicationRecords
+              filter={applicationFilter}
+              records={applications}
+              onClearFilter={() => setApplicationFilter("全部")}
+              onRemove={removeApplication}
+            />
           </section>
         )}
 
-        {activeView === "Offer日历" && (
+        {activeView === "Offer 日历" && (
+          <>
+          <ViewHeading
+            count={`${visibleCalendarEventCount} 个日程`}
+            subtitle="集中管理投递、笔试、面试、论文和待办同步生成的关键节点。"
+            title="Offer 日历"
+          />
           <CalendarPlanner
             applications={applications}
             todos={calendarTodos}
@@ -739,9 +977,16 @@ export default function OfferCatApp() {
             onRemoveEvent={removeCalendarEvent}
             onUpdateEvent={upsertCalendarEvent}
           />
+          </>
         )}
 
-        {activeView === "Offer Todo" && (
+        {activeView === "Offer To Do" && (
+          <>
+          <ViewHeading
+            count={`${calendarTodos.filter((todo) => !todo.done).length} 个待办`}
+            subtitle="把准备材料、复盘提醒和截止动作拆成可执行事项。"
+            title="Offer To Do"
+          />
           <OfferTodoPage
             todos={calendarTodos}
             onAddTodo={addCalendarTodo}
@@ -749,9 +994,541 @@ export default function OfferCatApp() {
             onToggleTodo={toggleCalendarTodo}
             onUpdateTodo={updateCalendarTodo}
           />
+          </>
         )}
       </section>
     </main>
+  );
+}
+
+function DashboardSidebar({
+  activeView,
+  navItems,
+  onNavigate,
+  tip,
+}: {
+  activeView: AppView;
+  navItems: Array<{ id: AppView; label: string; hint: string; icon: string }>;
+  onNavigate: (view: AppView) => void;
+  tip: string;
+}) {
+  return (
+    <aside className="dashboard-sidebar">
+      <button className="sidebar-brand" onClick={() => onNavigate("求职大盘")} type="button">
+        <Image src="/assets/offercat-mark.svg" alt="" width={42} height={42} />
+        <span>
+          <strong>offercat</strong>
+          秋招项目管理
+        </span>
+      </button>
+
+      <nav aria-label="主导航" className="sidebar-nav">
+        {navItems.map((item) => (
+          <button
+            aria-label={item.label}
+            className={activeView === item.id ? "active" : ""}
+            key={item.id}
+            onClick={() => onNavigate(item.id)}
+            title={item.label}
+            type="button"
+          >
+            <span aria-hidden="true">{item.icon}</span>
+            <strong>{item.label}</strong>
+            <small>{item.hint}</small>
+          </button>
+        ))}
+      </nav>
+
+      <article className="sidebar-campaign">
+        <span>校园招聘季</span>
+        <h3>把握每一次机会。</h3>
+        <p>用大盘看全局，用日历守住关键节点。</p>
+        <button onClick={() => onNavigate("求职大盘")} type="button">查看攻略</button>
+        <div aria-hidden="true" className="campaign-illustration">
+          <Image src="/assets/offercat-mark.svg" alt="" width={52} height={52} />
+        </div>
+      </article>
+
+      <article className="sidebar-tip">
+        <span>小贴士</span>
+        <p>{tip}</p>
+      </article>
+    </aside>
+  );
+}
+
+function DashboardHeader({
+  activeView,
+  dashboardData,
+  globalQuery,
+  isNotificationOpen,
+  isSearchActive,
+  isUserMenuOpen,
+  searchInputRef,
+  searchResults,
+  selectedSearchIndex,
+  onNavigate,
+  onSearchChange,
+  onSearchCommit,
+  onSearchFocus,
+  onSearchKeyDown,
+  onToggleNotifications,
+  onToggleUserMenu,
+}: {
+  activeView: AppView;
+  dashboardData: DashboardData;
+  globalQuery: string;
+  isNotificationOpen: boolean;
+  isSearchActive: boolean;
+  isUserMenuOpen: boolean;
+  searchInputRef: RefObject<HTMLInputElement | null>;
+  searchResults: SearchResult[];
+  selectedSearchIndex: number;
+  onNavigate: (view: AppView) => void;
+  onSearchChange: (value: string) => void;
+  onSearchCommit: (index?: number) => void;
+  onSearchFocus: () => void;
+  onSearchKeyDown: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
+  onToggleNotifications: () => void;
+  onToggleUserMenu: () => void;
+}) {
+  const current = navItems.find((item) => item.id === activeView);
+
+  return (
+    <header className="dashboard-topbar">
+      <div className="dashboard-title">
+        <h1>{activeView === "求职大盘" ? "求职总览" : activeView}</h1>
+        <p>{activeView === "求职大盘" ? "掌握全局进展，规划下一步行动。" : current?.hint || "持续更新你的秋招工作台。"}</p>
+      </div>
+
+      <GlobalSearch
+        inputRef={searchInputRef}
+        isActive={isSearchActive}
+        query={globalQuery}
+        results={searchResults}
+        selectedIndex={selectedSearchIndex}
+        onChange={onSearchChange}
+        onCommit={onSearchCommit}
+        onFocus={onSearchFocus}
+        onKeyDown={onSearchKeyDown}
+      />
+
+      <div className="topbar-actions">
+        <button
+          aria-expanded={isNotificationOpen}
+          aria-label="打开通知面板"
+          className="notification-button"
+          onClick={onToggleNotifications}
+          type="button"
+        >
+          <span aria-hidden="true">N</span>
+          {dashboardData.notifications.length > 0 && <strong>{Math.min(dashboardData.notifications.length, 9)}</strong>}
+        </button>
+        {isNotificationOpen && (
+          <NotificationPanel
+            notifications={dashboardData.notifications}
+            onNavigate={onNavigate}
+          />
+        )}
+
+        <button
+          aria-expanded={isUserMenuOpen}
+          className="user-button"
+          onClick={onToggleUserMenu}
+          type="button"
+        >
+          <span aria-hidden="true">R</span>
+          <strong>rockittycat</strong>
+          <small>2027 届求职中</small>
+        </button>
+        {isUserMenuOpen && <UserMenu />}
+      </div>
+    </header>
+  );
+}
+
+function GlobalSearch({
+  inputRef,
+  isActive,
+  query,
+  results,
+  selectedIndex,
+  onChange,
+  onCommit,
+  onFocus,
+  onKeyDown,
+}: {
+  inputRef: RefObject<HTMLInputElement | null>;
+  isActive: boolean;
+  query: string;
+  results: SearchResult[];
+  selectedIndex: number;
+  onChange: (value: string) => void;
+  onCommit: (index?: number) => void;
+  onFocus: () => void;
+  onKeyDown: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
+}) {
+  return (
+    <div className="global-search">
+      <label>
+        <span aria-hidden="true">⌕</span>
+        <input
+          aria-label="全局搜索"
+          onChange={(event) => onChange(event.currentTarget.value)}
+          onFocus={onFocus}
+          onKeyDown={onKeyDown}
+          placeholder="搜索公司、岗位、笔记、日程、待办..."
+          ref={inputRef}
+          value={query}
+        />
+        {query ? <button aria-label="清空搜索" onClick={() => onChange("")} type="button">×</button> : <kbd>⌘ K</kbd>}
+      </label>
+      {isActive && query.trim() && (
+        <div className="search-popover" role="listbox">
+          {results.length === 0 ? (
+            <p>没有找到匹配结果。</p>
+          ) : (
+            results.map((result, index) => (
+              <button
+                aria-selected={selectedIndex === index}
+                className={selectedIndex === index ? "active" : ""}
+                key={result.id}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => onCommit(index)}
+                role="option"
+                type="button"
+              >
+                <span>{result.type}</span>
+                <strong>{result.title}</strong>
+                <small>{result.detail}</small>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NotificationPanel({
+  notifications,
+  onNavigate,
+}: {
+  notifications: DashboardReminder[];
+  onNavigate: (view: AppView) => void;
+}) {
+  return (
+    <section className="notification-panel" role="dialog" aria-label="近期通知">
+      <div>
+        <strong>近期通知</strong>
+        <button onClick={() => onNavigate("Offer 日历")} type="button">查看全部</button>
+      </div>
+      {notifications.length === 0 ? (
+        <p>暂无临近节点。</p>
+      ) : (
+        notifications.slice(0, 5).map((item) => (
+          <button key={item.id} onClick={() => onNavigate(item.view)} type="button">
+            <span className={`reminder-dot reminder-dot--${item.color}`} />
+            <strong>{item.title}</strong>
+            <small>{item.dateLabel} · {item.distance}</small>
+          </button>
+        ))
+      )}
+    </section>
+  );
+}
+
+function UserMenu() {
+  return (
+    <section className="user-menu" role="menu" aria-label="用户菜单">
+      {["个人资料", "数据设置", "账号设置", "退出登录"].map((item) => (
+        <button key={item} role="menuitem" type="button">{item}</button>
+      ))}
+    </section>
+  );
+}
+
+function DashboardOverview({
+  data,
+  isLoading,
+  trendRange,
+  onCompanyTypeClick,
+  onNavigate,
+  onStatusClick,
+  onTrendRangeChange,
+}: {
+  data: DashboardData;
+  isLoading: boolean;
+  trendRange: TrendRange;
+  onCompanyTypeClick: (companyType: string) => void;
+  onNavigate: (view: AppView) => void;
+  onStatusClick: (status: string) => void;
+  onTrendRangeChange: (range: TrendRange) => void;
+}) {
+  return (
+    <section className="overview-grid">
+      <div className="metric-grid">
+        {data.metrics.map((metric) => (
+          <MetricCard
+            isLoading={isLoading}
+            key={metric.id}
+            metric={metric}
+            onClick={() => onStatusClick(metric.filterStatus)}
+          />
+        ))}
+      </div>
+
+      <ApplicationTrendChart
+        points={data.trendPoints}
+        range={trendRange}
+        onRangeChange={onTrendRangeChange}
+      />
+      <RecruitmentPipeline rows={data.pipeline} onStatusClick={onStatusClick} />
+      <UpcomingReminderList reminders={data.reminders} onNavigate={onNavigate} />
+      <CompanyTypeDistribution groups={data.companyTypes} onCompanyTypeClick={onCompanyTypeClick} onNavigate={onNavigate} />
+      <MotivationCard progress={data.progress} onNavigate={onNavigate} />
+    </section>
+  );
+}
+
+function MetricCard({
+  isLoading,
+  metric,
+  onClick,
+}: {
+  isLoading: boolean;
+  metric: DashboardMetric;
+  onClick: () => void;
+}) {
+  return (
+    <button className={`dashboard-card metric-card metric-card--${metric.color}`} onClick={onClick} type="button">
+      <span aria-hidden="true" className="metric-icon">{metric.icon}</span>
+      <small>{metric.label}</small>
+      {isLoading ? <span className="skeleton-line skeleton-line--number" /> : <strong>{metric.value}</strong>}
+      <em>{metric.helper}</em>
+    </button>
+  );
+}
+
+function ApplicationTrendChart({
+  points,
+  range,
+  onRangeChange,
+}: {
+  points: TrendPoint[];
+  range: TrendRange;
+  onRangeChange: (range: TrendRange) => void;
+}) {
+  const maxValue = Math.max(...points.map((point) => point.value), 1);
+  const chartPoints = points.map((point, index) => {
+    const x = points.length <= 1 ? 50 : 34 + (index * 332) / (points.length - 1);
+    const y = 176 - (point.value / maxValue) * 132;
+    return { ...point, x, y };
+  });
+  const path = chartPoints.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+  const areaPath = chartPoints.length > 0 ? `${path} L ${chartPoints[chartPoints.length - 1].x} 188 L ${chartPoints[0].x} 188 Z` : "";
+  const hasData = points.some((point) => point.value > 0);
+
+  return (
+    <section className="dashboard-card trend-card">
+      <div className="card-heading">
+        <div>
+          <h2>近期投递趋势</h2>
+          <p>按投递日期统计最近节奏。</p>
+        </div>
+        <select aria-label="趋势时间范围" onChange={(event) => onRangeChange(event.currentTarget.value as TrendRange)} value={range}>
+          {trendRanges.map((item) => (
+            <option key={item.value} value={item.value}>{item.label}</option>
+          ))}
+        </select>
+      </div>
+      {hasData ? (
+        <div className="trend-chart">
+          <svg aria-label="近期投递趋势折线图" role="img" viewBox="0 0 400 220">
+            <defs>
+              <linearGradient id="trendFill" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stopColor="#4f5ff7" stopOpacity="0.22" />
+                <stop offset="100%" stopColor="#4f5ff7" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            {[0, 1, 2, 3].map((line) => (
+              <line key={line} x1="28" x2="374" y1={44 + line * 44} y2={44 + line * 44} />
+            ))}
+            <path d={areaPath} fill="url(#trendFill)" />
+            <path d={path} fill="none" stroke="#4f5ff7" strokeLinecap="round" strokeWidth="4" />
+            {chartPoints.map((point) => (
+              <g key={point.label}>
+                <circle cx={point.x} cy={point.y} r="5" />
+                <text x={point.x} y={point.y - 12}>{point.value}</text>
+                <title>{point.label}：{point.value} 次投递</title>
+              </g>
+            ))}
+          </svg>
+          <div className="trend-labels">
+            {chartPoints.map((point) => (
+              <span key={point.label}>{point.label}</span>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <EmptyState title="暂无投递趋势" description="新增带投递日期的记录后，这里会自动绘制趋势。" />
+      )}
+    </section>
+  );
+}
+
+function RecruitmentPipeline({
+  rows,
+  onStatusClick,
+}: {
+  rows: PipelineRow[];
+  onStatusClick: (status: string) => void;
+}) {
+  return (
+    <section className="dashboard-card pipeline-card">
+      <div className="card-heading">
+        <div>
+          <h2>求职流程总览</h2>
+          <p>状态占比按当前投递记录计算。</p>
+        </div>
+      </div>
+      <div className="pipeline-list">
+        {rows.map((row) => (
+          <button className={`pipeline-row pipeline-row--${row.color}`} key={row.status} onClick={() => onStatusClick(row.status)} type="button">
+            <span aria-hidden="true">{row.icon}</span>
+            <strong>{row.label}</strong>
+            <em>{row.count}</em>
+            <small>{row.percent}%</small>
+            <i style={{ width: `${row.percent}%` }} />
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function UpcomingReminderList({
+  reminders,
+  onNavigate,
+}: {
+  reminders: DashboardReminder[];
+  onNavigate: (view: AppView) => void;
+}) {
+  return (
+    <section className="dashboard-card reminders-card">
+      <div className="card-heading">
+        <div>
+          <h2>近期提醒</h2>
+          <p>未来节点按时间排序。</p>
+        </div>
+        <button onClick={() => onNavigate("Offer 日历")} type="button">查看全部</button>
+      </div>
+      {reminders.length === 0 ? (
+        <EmptyState title="暂无近期提醒" description="添加日程、Todo 或下一步截止时间后会显示在这里。" />
+      ) : (
+        <div className="reminder-list">
+          {reminders.slice(0, 5).map((reminder) => (
+            <button className={reminder.isOverdue ? "overdue" : ""} key={reminder.id} onClick={() => onNavigate(reminder.view)} type="button">
+              <span className={`reminder-dot reminder-dot--${reminder.color}`} />
+              <strong>{reminder.title}</strong>
+              <small>{reminder.dateLabel} {reminder.time}</small>
+              <em>{reminder.distance}</em>
+            </button>
+          ))}
+        </div>
+      )}
+      <button className="add-reminder-button" onClick={() => onNavigate("Offer 日历")} type="button">+ 添加提醒</button>
+    </section>
+  );
+}
+
+function CompanyTypeDistribution({
+  groups,
+  onCompanyTypeClick,
+  onNavigate,
+}: {
+  groups: CompanyTypeStat[];
+  onCompanyTypeClick: (companyType: string) => void;
+  onNavigate: (view: AppView) => void;
+}) {
+  return (
+    <section className="dashboard-card company-type-card">
+      <div className="card-heading">
+        <div>
+          <h2>目标公司类型分布</h2>
+          <p>根据岗位库和投递记录实时归类。</p>
+        </div>
+      </div>
+      <div className="company-type-grid">
+        {groups.map((group) => (
+          <button className={`company-type company-type--${group.color}`} key={group.label} onClick={() => onCompanyTypeClick(group.key)} type="button">
+            <span aria-hidden="true">{group.icon}</span>
+            <strong>{group.label}</strong>
+            <em>{group.percent}%</em>
+            <small>{group.count} / {group.total}</small>
+          </button>
+        ))}
+      </div>
+      <div className="company-card-footer">
+        <span>继续投递优质岗位，扩大选择空间。</span>
+        <button onClick={() => onNavigate("求职信息源")} type="button">查看全部公司 →</button>
+      </div>
+    </section>
+  );
+}
+
+function MotivationCard({
+  progress,
+  onNavigate,
+}: {
+  progress: number;
+  onNavigate: (view: AppView) => void;
+}) {
+  return (
+    <section className="dashboard-card motivation-card">
+      <div>
+        <h2>加油，未来可期！</h2>
+        <p>保持节奏，离理想 offer 更近一步。</p>
+        <div className="motivation-progress">
+          <span><i style={{ width: `${progress}%` }} /></span>
+          <strong>{progress}%</strong>
+        </div>
+        <button onClick={() => onNavigate("Offer To Do")} type="button">查看待办</button>
+      </div>
+      <div aria-hidden="true" className="motivation-figure">
+        <Image src="/assets/offercat-mark.svg" alt="" width={82} height={82} />
+      </div>
+    </section>
+  );
+}
+
+function ViewHeading({
+  count,
+  subtitle,
+  title,
+}: {
+  count: string;
+  subtitle: string;
+  title: string;
+}) {
+  return (
+    <div className="view-heading">
+      <div>
+        <span>Workspace</span>
+        <h2>{title}</h2>
+        <p>{subtitle}</p>
+      </div>
+      <strong>{count}</strong>
+    </div>
+  );
+}
+
+function EmptyState({ description, title }: { description: string; title: string }) {
+  return (
+    <div className="dashboard-empty-state">
+      <strong>{title}</strong>
+      <p>{description}</p>
+    </div>
   );
 }
 
@@ -1849,6 +2626,272 @@ function DeleteLinkedEventDialog({
   );
 }
 
+function buildDashboardData({
+  applications,
+  events,
+  jobs,
+  todos,
+  trendRange,
+}: {
+  applications: ApplicationRecord[];
+  events: CalendarEvent[];
+  jobs: Job[];
+  todos: CalendarTodo[];
+  trendRange: TrendRange;
+}): DashboardData {
+  const submittedJobCount = jobs.filter((job) => job.status === "已投递" || job.status === "面试中").length;
+  const totalApplications = applications.length + submittedJobCount;
+  const writtenCount = applications.filter((record) => record.status === "笔试中" || isActiveStage(record.writtenTest)).length
+    + events.filter((event) => event.eventType === "written").length;
+  const interviewCount = applications.filter((record) => record.status === "面试中" || isActiveStage(record.interview)).length
+    + events.filter((event) => event.eventType === "interview").length;
+  const offerCount = applications.filter((record) => record.status === "Offer" || record.offerStatus !== "暂无").length
+    + events.filter((event) => event.eventType === "offer").length;
+  const followCount = applications.filter((record) => record.needsFollowUp === "是" && record.status !== "已结束").length
+    + todos.filter((todo) => !todo.done && todo.kind === "follow").length;
+  const reminders = buildDashboardReminders({ applications, events, todos });
+  const openTodos = todos.filter((todo) => !todo.done).length;
+  const doneTodos = todos.filter((todo) => todo.done).length;
+  const progressBase = openTodos + doneTodos + totalApplications;
+  const progressDone = doneTodos + applications.filter((record) => record.status === "已结束" || record.offerStatus === "已接受").length;
+
+  return {
+    companyTypes: buildCompanyTypeStats(jobs, applications),
+    metrics: [
+      { id: "total", label: "总投递数", value: totalApplications, helper: "暂无历史变化", color: "blue", icon: "↗", filterStatus: "全部" },
+      { id: "written", label: "笔试中", value: writtenCount, helper: "来自记录与日历", color: "indigo", icon: "✎", filterStatus: "笔试中" },
+      { id: "interview", label: "面试中", value: interviewCount, helper: "来自记录与日历", color: "purple", icon: "◉", filterStatus: "面试中" },
+      { id: "offer", label: "Offer", value: offerCount, helper: "含 offer 决策节点", color: "orange", icon: "★", filterStatus: "Offer" },
+      { id: "follow", label: "待跟进", value: followCount, helper: "未完成跟进事项", color: "red", icon: "!", filterStatus: "待跟进" },
+    ],
+    notifications: reminders.filter((reminder) => reminder.isOverdue || reminder.distance === "今天截止" || reminder.distance === "还有 1 天"),
+    pipeline: buildPipelineRows({ applications, jobs, totalApplications }),
+    progress: progressBase === 0 ? 0 : Math.min(100, Math.round((progressDone / progressBase) * 100)),
+    reminders,
+    trendPoints: buildTrendPoints({ applications, jobs, trendRange }),
+  };
+}
+
+function buildPipelineRows({
+  applications,
+  jobs,
+  totalApplications,
+}: {
+  applications: ApplicationRecord[];
+  jobs: Job[];
+  totalApplications: number;
+}) {
+  const rows = statusVisuals.map((item) => {
+    const count = countStatus(item.key, applications, jobs);
+    const denominator = item.key === "收藏中" ? Math.max(jobs.length, 1) : Math.max(totalApplications, 1);
+    return {
+      status: item.key,
+      label: item.label,
+      count,
+      percent: Math.min(100, Math.round((count / denominator) * 100)),
+      color: item.color,
+      icon: item.label.slice(0, 1),
+    };
+  });
+
+  return rows;
+}
+
+function countStatus(status: string, applications: ApplicationRecord[], jobs: Job[]) {
+  if (status === "收藏中") return jobs.filter((job) => job.status === "收藏中").length;
+  if (status === "笔试中") return applications.filter((record) => record.status === "笔试中" || isActiveStage(record.writtenTest)).length;
+  if (status === "面试中") return applications.filter((record) => record.status === "面试中" || isActiveStage(record.interview)).length;
+  if (status === "Offer") return applications.filter((record) => record.status === "Offer" || record.offerStatus !== "暂无").length;
+  if (status === "已结束") return applications.filter((record) => record.status === "已结束").length;
+  return applications.filter((record) => record.status === status).length + jobs.filter((job) => job.status === status).length;
+}
+
+function isActiveStage(value: string) {
+  return Boolean(value && value !== "未开始" && value !== "无" && value !== "待确认");
+}
+
+function buildCompanyTypeStats(jobs: Job[], applications: ApplicationRecord[]): CompanyTypeStat[] {
+  const entries = [
+    ...jobs.map((job) => `${job.companyType} ${job.industry} ${job.tags.join(" ")}`),
+    ...applications.map((record) => `${record.companyType} ${record.industry} ${record.direction}`),
+  ].filter(Boolean);
+  const total = Math.max(entries.length, 1);
+
+  return companyTypeGroups.map((group, index) => {
+    const count = group.key === "其他"
+      ? entries.filter((entry) => !companyTypeGroups.some((candidate) => candidate.key !== "其他" && candidate.match.some((keyword) => entry.includes(keyword)))).length
+      : entries.filter((entry) => group.match.some((keyword) => entry.includes(keyword))).length;
+
+    return {
+      key: group.key,
+      label: group.label,
+      count,
+      total: entries.length,
+      percent: Math.round((count / total) * 100),
+      color: group.color,
+      icon: ["◎", "□", "△", "◇", "⌑", "·"][index] || "·",
+    };
+  });
+}
+
+function buildTrendPoints({
+  applications,
+  jobs,
+  trendRange,
+}: {
+  applications: ApplicationRecord[];
+  jobs: Job[];
+  trendRange: TrendRange;
+}) {
+  const range = trendRanges.find((item) => item.value === trendRange) || trendRanges[1];
+  const today = new Date();
+  const start = new Date(today);
+  start.setDate(today.getDate() - range.weeks * 7 + 1);
+
+  return Array.from({ length: Math.min(range.weeks, 12) }, (_, index) => {
+    const bucketStart = new Date(start);
+    bucketStart.setDate(start.getDate() + index * 7);
+    const bucketEnd = new Date(bucketStart);
+    bucketEnd.setDate(bucketStart.getDate() + 6);
+    const value = applications.filter((record) => dateInRange(record.applyDate, bucketStart, bucketEnd)).length
+      + jobs.filter((job) => (job.status === "已投递" || job.status === "面试中") && dateInRange(job.updatedAt, bucketStart, bucketEnd)).length;
+
+    return {
+      label: `${bucketStart.getMonth() + 1}.${bucketStart.getDate()}-${bucketEnd.getMonth() + 1}.${bucketEnd.getDate()}`,
+      value,
+    };
+  });
+}
+
+function buildDashboardReminders({
+  applications,
+  events,
+  todos,
+}: {
+  applications: ApplicationRecord[];
+  events: CalendarEvent[];
+  todos: CalendarTodo[];
+}) {
+  const reminders: DashboardReminder[] = [];
+
+  events.forEach((event) => {
+    reminders.push({
+      id: `event-${event.id}`,
+      title: event.title,
+      date: event.date,
+      dateLabel: formatDateLabel(event.date),
+      time: event.startTime || "全天",
+      distance: distanceLabel(event.date, toDateKey(new Date())),
+      color: colorFromEventType(event.eventType),
+      isOverdue: event.date < toDateKey(new Date()),
+      view: "Offer 日历",
+    });
+  });
+
+  todos.filter((todo) => !todo.done).forEach((todo) => {
+    reminders.push({
+      id: `todo-reminder-${todo.id}`,
+      title: todo.title,
+      date: todo.due,
+      dateLabel: formatDateLabel(todo.due),
+      time: "待办",
+      distance: distanceLabel(todo.due, toDateKey(new Date())),
+      color: colorFromEventType(todo.kind),
+      isOverdue: todo.due < toDateKey(new Date()),
+      view: "Offer To Do",
+    });
+  });
+
+  applications.forEach((record) => {
+    if (record.nextDeadline) {
+      reminders.push(buildApplicationReminder(record, "next"));
+    }
+    if (record.offerDeadline) {
+      reminders.push(buildApplicationReminder(record, "offer"));
+    }
+  });
+
+  return reminders
+    .filter((reminder) => Boolean(reminder.date))
+    .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
+}
+
+function buildApplicationReminder(record: ApplicationRecord, kind: "next" | "offer"): DashboardReminder {
+  const date = kind === "offer" ? record.offerDeadline : record.nextDeadline.slice(0, 10);
+  const time = kind === "offer" ? "18:00" : record.nextDeadline.slice(11, 16) || "09:00";
+  return {
+    id: `${record.id}-${kind}-reminder`,
+    title: kind === "offer" ? `${record.company} Offer 决策` : `${record.company} · ${record.nextAction || record.role}`,
+    date,
+    dateLabel: formatDateLabel(date),
+    time,
+    distance: distanceLabel(date, toDateKey(new Date())),
+    color: kind === "offer" ? "green" : "purple",
+    isOverdue: date < toDateKey(new Date()),
+    view: "Offer 跟进",
+  };
+}
+
+function buildSearchResults({
+  applications,
+  events,
+  jobs,
+  query,
+  todos,
+}: {
+  applications: ApplicationRecord[];
+  events: CalendarEvent[];
+  jobs: Job[];
+  query: string;
+  todos: CalendarTodo[];
+}): SearchResult[] {
+  const keyword = query.trim().toLowerCase();
+  if (!keyword) return [];
+
+  const results: SearchResult[] = [];
+  jobs.forEach((job) => {
+    const haystack = [job.company, job.title, job.description, job.tags.join(" ")].join(" ").toLowerCase();
+    if (haystack.includes(keyword)) {
+      results.push({ id: `job-${job.id}`, title: `${job.company} · ${job.title}`, detail: job.city, type: "岗位", view: "求职信息源" });
+    }
+  });
+  applications.forEach((record) => {
+    const haystack = [record.company, record.role, record.notes, record.jd, record.nextAction].join(" ").toLowerCase();
+    if (haystack.includes(keyword)) {
+      results.push({ id: `application-${record.id}`, title: `${record.company} · ${record.role}`, detail: record.status, type: "投递", view: "Offer 跟进" });
+    }
+  });
+  events.forEach((event) => {
+    const haystack = [event.title, event.description, event.location, event.source].join(" ").toLowerCase();
+    if (haystack.includes(keyword)) {
+      results.push({ id: `event-${event.id}`, title: event.title, detail: `${formatDateLabel(event.date)} ${event.startTime}`, type: "日程", view: "Offer 日历" });
+    }
+  });
+  todos.forEach((todo) => {
+    const haystack = [todo.title, todo.owner, todo.kind].join(" ").toLowerCase();
+    if (haystack.includes(keyword)) {
+      results.push({ id: `todo-${todo.id}`, title: todo.title, detail: `${formatDateLabel(todo.due)} · ${priorityLabel(todo.priority)}`, type: "待办", view: "Offer To Do" });
+    }
+  });
+
+  return results.slice(0, 8);
+}
+
+function colorFromEventType(eventType: CalendarEventType | CalendarEventKind) {
+  if (eventType === "deadline") return "red";
+  if (eventType === "written") return "indigo";
+  if (eventType === "interview") return "purple";
+  if (eventType === "offer") return "green";
+  if (eventType === "follow") return "cyan";
+  return "slate";
+}
+
+function dateInRange(dateKey: string, start: Date, end: Date) {
+  const parsed = new Date(`${dateKey.slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return false;
+  return parsed >= start && parsed <= end;
+}
+
 function buildApplicationEvents(applications: ApplicationRecord[]): CalendarEvent[] {
   return applications.flatMap((record) => {
     const events: CalendarEvent[] = [];
@@ -2363,12 +3406,18 @@ function SelectField({
 }
 
 function ApplicationRecords({
+  filter,
+  onClearFilter,
   records,
   onRemove,
 }: {
+  filter: string;
+  onClearFilter: () => void;
   records: ApplicationRecord[];
   onRemove: (id: string) => void;
 }) {
+  const visibleRecords = records.filter((record) => applicationMatchesFilter(record, filter));
+
   if (records.length === 0) {
     return (
       <section className="record-panel record-panel--empty">
@@ -2382,10 +3431,16 @@ function ApplicationRecords({
     <section className="record-panel">
       <div className="record-heading">
         <span>Application records</span>
-        <h3>我的投递记录</h3>
+        <h3>{filter === "全部" ? "我的投递记录" : `${filter}记录`}</h3>
+        {filter !== "全部" && <button onClick={onClearFilter} type="button">清除筛选</button>}
       </div>
       <div className="record-list">
-        {records.map((record) => (
+        {visibleRecords.length === 0 ? (
+          <div className="dashboard-empty-state">
+            <strong>暂无匹配记录</strong>
+            <p>当前筛选下没有投递记录，可以清除筛选或新增一条。</p>
+          </div>
+        ) : visibleRecords.map((record) => (
           <article className="record-card" key={record.id}>
             <div>
               <span>{record.priority} · {record.interest}意向</span>
@@ -2406,4 +3461,13 @@ function ApplicationRecords({
       </div>
     </section>
   );
+}
+
+function applicationMatchesFilter(record: ApplicationRecord, filter: string) {
+  if (filter === "全部") return true;
+  if (filter === "待跟进") return record.needsFollowUp === "是" && record.status !== "已结束";
+  if (filter === "笔试中") return record.status === "笔试中" || isActiveStage(record.writtenTest);
+  if (filter === "面试中") return record.status === "面试中" || isActiveStage(record.interview);
+  if (filter === "Offer") return record.status === "Offer" || record.offerStatus !== "暂无";
+  return record.status === filter;
 }
