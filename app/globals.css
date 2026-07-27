@@ -7227,7 +7227,7 @@ textarea:focus-visible {
 .calendar-month-card {
   justify-self: center;
   width: 100%;
-  max-width: 980px;
+  max-width: 940px;
   padding: 14px;
 }
 
@@ -7703,5 +7703,147 @@ textarea:focus-visible {
   .calendar-month-card .calendar-day {
     min-height: 82px;
     padding: 7px 5px;
+  }
+}
+
+/* Precision repair: keep sidebar labels aligned and prevent calendar panel text clipping. */
+.dashboard-sidebar .sidebar-nav {
+  gap: 10px;
+}
+
+.dashboard-sidebar .sidebar-nav button {
+  display: grid !important;
+  grid-template-columns: 34px minmax(0, 1fr);
+  grid-template-rows: 18px 16px;
+  grid-template-areas:
+    "icon label"
+    "icon hint";
+  align-items: center;
+  justify-items: start;
+  justify-content: stretch !important;
+  width: 100%;
+  min-height: 52px;
+  height: 52px;
+  gap: 0 12px;
+  padding: 0 14px !important;
+  text-align: left;
+}
+
+.dashboard-sidebar .sidebar-nav button > span {
+  grid-area: icon;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  place-self: center;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  border-radius: 9px;
+}
+
+.dashboard-sidebar .sidebar-nav button svg {
+  width: 17px;
+  height: 17px;
+}
+
+.dashboard-sidebar .sidebar-nav strong {
+  grid-area: label;
+  align-self: end;
+  min-width: 0;
+  color: inherit;
+  font-size: 14px;
+  line-height: 1;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.dashboard-sidebar .sidebar-nav small {
+  grid-area: hint;
+  display: block;
+  align-self: start;
+  min-width: 0;
+  max-width: 100%;
+  margin-top: 3px;
+  color: #7d879f;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-sidebar .sidebar-nav button.active small {
+  color: #5263f5;
+}
+
+.offer-calendar-page {
+  max-width: 1600px;
+}
+
+.calendar-workbench {
+  grid-template-columns: 250px minmax(720px, 1fr) 360px;
+}
+
+.calendar-workbench > .calendar-assist-panel {
+  width: 100%;
+}
+
+.calendar-assist-panel {
+  padding: 14px;
+  overflow-x: hidden;
+}
+
+.selected-day-panel .panel-title-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.selected-day-panel .panel-title-row h3 {
+  max-width: 100%;
+  line-height: 1.28;
+  white-space: normal;
+}
+
+.selected-day-panel .panel-title-row button {
+  min-width: 78px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
+.selected-event {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  min-height: 58px;
+  overflow: visible;
+  line-height: 1.35;
+}
+
+.selected-event span {
+  grid-column: 1;
+  white-space: nowrap;
+}
+
+.selected-event strong {
+  grid-column: 2;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.selected-event small,
+.selected-event em {
+  grid-column: 1 / -1;
+  white-space: normal;
+}
+
+@media (min-width: 1600px) {
+  .offer-calendar-page {
+    max-width: 1600px;
+  }
+
+  .calendar-workbench {
+    grid-template-columns: 250px minmax(760px, 1fr) 360px;
   }
 }
