@@ -6,6 +6,7 @@ import {
   Award,
   Bell,
   Bot,
+  BookOpen,
   BriefcaseBusiness,
   Building2,
   CalendarDays,
@@ -13,12 +14,18 @@ import {
   CheckSquare,
   ChevronDown,
   ClipboardList,
+  Edit3,
   FileText,
+  Flag,
   Globe2,
   Grid2X2,
+  GraduationCap,
+  Hourglass,
   Link2,
+  MapPin,
   Menu,
   NotebookPen,
+  Plus,
   Search,
   Send,
   ShieldCheck,
@@ -26,6 +33,7 @@ import {
   Star,
   Tags,
   Target,
+  Trash2,
   UsersRound,
   X,
   type LucideIcon,
@@ -171,6 +179,7 @@ type TodoPanelMode = "todoList" | "createTodo" | "editTodo";
 type AppView = "求职大盘" | "求职信息源" | "Offer 跟进" | "Offer 日历" | "Offer To Do";
 type TrendRange = "4w" | "8w" | "12w" | "6m" | "year";
 type IconComponent = LucideIcon;
+type CalendarFilterValue = "all" | ScheduleCategoryValue | CalendarEventType | "custom";
 type PendingCalendarAction =
   | { type: "close" }
   | { type: "selectDay"; dateKey: string }
@@ -573,6 +582,7 @@ export default function OfferCatApp() {
   const [companyKind, setCompanyKind] = useState("全部");
   const [applicationFilter, setApplicationFilter] = useState("全部");
   const [form, setForm] = useState<ApplicationRecord>(blankApplication);
+  const [editingApplicationId, setEditingApplicationId] = useState<string | null>(null);
   const [applications, setApplications] = useState<ApplicationRecord[]>([]);
   const [formMessage, setFormMessage] = useState("");
   const [calendarTodos, setCalendarTodos] = useState<CalendarTodo[]>(defaultCalendarTodos);
@@ -675,7 +685,6 @@ export default function OfferCatApp() {
       }),
     [applications, calendarEvents, calendarTodos, dismissedCalendarEventIds],
   );
-  const visibleCalendarEventCount = visibleCalendarEvents.length;
   const dashboardData = useMemo(
     () => buildDashboardData({ applications, events: visibleCalendarEvents, jobs, todos: calendarTodos, trendRange }),
     [applications, calendarTodos, jobs, trendRange, visibleCalendarEvents],
@@ -741,12 +750,31 @@ export default function OfferCatApp() {
 
     const nextRecord: ApplicationRecord = {
       ...form,
-      id: window.crypto?.randomUUID?.() || `${Date.now()}`,
+      id: editingApplicationId || window.crypto?.randomUUID?.() || `${Date.now()}`,
+      company: form.company.trim(),
+      role: form.role.trim(),
     };
 
-    setApplications((current) => [nextRecord, ...current]);
+    setApplications((current) =>
+      editingApplicationId
+        ? current.map((item) => (item.id === editingApplicationId ? nextRecord : item))
+        : [nextRecord, ...current],
+    );
     setForm(blankApplication);
-    setFormMessage("已加入我的秋招记录。");
+    setEditingApplicationId(null);
+    setFormMessage(editingApplicationId ? "已更新这条求职记录。" : "已加入我的秋招记录。");
+  }
+
+  function resetApplicationForm() {
+    setForm(blankApplication);
+    setEditingApplicationId(null);
+    setFormMessage("");
+  }
+
+  function editApplication(record: ApplicationRecord) {
+    setForm(record);
+    setEditingApplicationId(record.id);
+    setFormMessage("正在编辑已有记录。");
   }
 
   function removeApplication(id: string) {
@@ -987,29 +1015,23 @@ export default function OfferCatApp() {
         )}
 
         {activeView === "Offer 跟进" && (
-          <section className="application-area">
-            <ApplicationForm
-              form={form}
-              formMessage={formMessage}
-              onChange={updateForm}
-              onSubmit={submitApplication}
-            />
-            <ApplicationRecords
-              filter={applicationFilter}
-              records={applications}
-              onClearFilter={() => setApplicationFilter("全部")}
-              onRemove={removeApplication}
-            />
-          </section>
+          <OfferTrackingPage
+            filter={applicationFilter}
+            form={form}
+            formMessage={formMessage}
+            isEditing={Boolean(editingApplicationId)}
+            records={applications}
+            onChange={updateForm}
+            onClearFilter={() => setApplicationFilter("全部")}
+            onEdit={editApplication}
+            onFilterChange={setApplicationFilter}
+            onRemove={removeApplication}
+            onResetForm={resetApplicationForm}
+            onSubmit={submitApplication}
+          />
         )}
 
         {activeView === "Offer 日历" && (
-          <>
-          <ViewHeading
-            count={`${visibleCalendarEventCount} 个日程`}
-            subtitle="集中管理投递、笔试、面试、论文和待办同步生成的关键节点。"
-            title="Offer 日历"
-          />
           <CalendarPlanner
             applications={applications}
             todos={calendarTodos}
@@ -1021,7 +1043,6 @@ export default function OfferCatApp() {
             onRemoveEvent={removeCalendarEvent}
             onUpdateEvent={upsertCalendarEvent}
           />
-          </>
         )}
 
         {activeView === "Offer To Do" && (
@@ -1670,6 +1691,7 @@ function CalendarPlanner({
   const [eventToDelete, setEventToDelete] = useState<CalendarEvent | null>(null);
   const [linkedEventToDelete, setLinkedEventToDelete] = useState<CalendarEvent | null>(null);
   const [calendarNotice, setCalendarNotice] = useState("");
+  const [activeCalendarFilter, setActiveCalendarFilter] = useState<CalendarFilterValue>("all");
 
   const events = useMemo(
     () =>
@@ -1682,16 +1704,33 @@ function CalendarPlanner({
     [applications, customEvents, dismissedEventIds, todos],
   );
   const calendarDays = useMemo(() => buildCalendarDays(visibleMonth), [visibleMonth]);
-  const selectedEvents = sortCalendarEvents(events.filter((event) => event.date === selectedDate));
+  const filteredEvents = useMemo(
+    () => events.filter((event) => calendarEventMatchesFilter(event, activeCalendarFilter)),
+    [activeCalendarFilter, events],
+  );
+  const selectedEvents = sortCalendarEvents(filteredEvents.filter((event) => event.date === selectedDate));
   const activeEvent = activeEventId ? events.find((event) => event.id === activeEventId) : null;
   const monthLabel = `${visibleMonth.getFullYear()}年${visibleMonth.getMonth() + 1}月`;
-  const interviewCount = events.filter((event) => event.eventType === "interview").length;
-  const deadlineCount = events.filter((event) => event.eventType === "deadline" || event.eventType === "offer").length;
-  const categoryStats = scheduleCategories.map((category) => ({
-    ...category,
-    count: events.filter((event) => event.category === category.value).length,
-  }));
+  const monthPrefix = `${visibleMonth.getFullYear()}-${String(visibleMonth.getMonth() + 1).padStart(2, "0")}`;
+  const monthEvents = events.filter((event) => event.date.startsWith(monthPrefix));
+  const writtenCount = monthEvents.filter((event) => event.eventType === "written").length;
+  const interviewCount = monthEvents.filter((event) => event.eventType === "interview").length;
+  const deadlineCount = monthEvents.filter((event) => event.eventType === "deadline" || event.eventType === "offer").length;
+  const doneTodoCount = todos.filter((todo) => todo.done).length;
+  const completionRate = todos.length === 0 ? 0 : Math.round((doneTodoCount / todos.length) * 100);
+  const todayKey = toDateKey(today);
+  const todayEvents = sortCalendarEvents(filteredEvents.filter((event) => event.date === todayKey)).slice(0, 4);
+  const upcomingEvents = sortCalendarEvents(filteredEvents.filter((event) => event.date >= todayKey)).slice(0, 5);
   const isEventFormDirty = (panelMode === "createEvent" || panelMode === "editEvent") && !calendarDraftsEqual(eventDraft, eventDraftBase);
+  const calendarFilters: Array<{ value: CalendarFilterValue; label: string; icon: IconComponent }> = [
+    { value: "all", label: "全部", icon: Grid2X2 },
+    { value: "student_work", label: "学工事项", icon: GraduationCap },
+    { value: "job_search", label: "找工作", icon: BriefcaseBusiness },
+    { value: "written", label: "笔试", icon: NotebookPen },
+    { value: "interview", label: "面试", icon: UsersRound },
+    { value: "deadline", label: "截止日", icon: AlarmClock },
+    { value: "custom", label: "自定义", icon: Plus },
+  ];
 
   useEffect(() => {
     if (!calendarNotice) return;
@@ -1919,104 +1958,174 @@ function CalendarPlanner({
   }
 
   return (
-    <section className="calendar-planner">
-      <div className="calendar-sidebar">
-        <div className="calendar-mini-card">
-          <span>Offer Calendar</span>
-          <h3>{monthLabel}</h3>
-          <p>把求职、论文、学工、课程和个人节点放进同一张月历，用颜色看清每天的重心。</p>
+    <section className="calendar-planner offer-calendar-page">
+      <div className="calendar-page-title">
+        <div className="tracking-title-icon">
+          <CalendarDays aria-hidden="true" />
         </div>
-        <div className="calendar-stats">
-          <Metric label="日历节点" value={events.length} />
-          <Metric label="面试节点" value={interviewCount} />
-          <Metric label="关键截止" value={deadlineCount} />
-        </div>
-        <div className="calendar-legend" aria-label="所属领域颜色说明">
-          <strong>所属领域</strong>
-          {categoryStats.map((category) => (
-            <span className={`legend-dot schedule-category--${category.value}`} key={category.value}>
-              {category.label}
-              <small>{category.count}</small>
-            </span>
-          ))}
+        <div>
+          <h2>Offer 日历</h2>
+          <p>把笔试、面试、截止日与个人安排放进同一个时间视图</p>
         </div>
       </div>
 
-      <div className="calendar-main">
-        <div className="calendar-toolbar">
-          <div>
-            <span>Month view</span>
+      <div className="calendar-summary-grid">
+        <CalendarSummaryCard color="indigo" icon={NotebookPen} label="本月笔试" trend="+2" value={writtenCount} />
+        <CalendarSummaryCard color="purple" icon={UsersRound} label="本月面试" trend="+1" value={interviewCount} />
+        <CalendarSummaryCard color="orange" icon={AlarmClock} label="本月截止" trend="-1" value={deadlineCount} />
+        <CalendarSummaryCard color="green" icon={CheckCircle2} label="完成率" trend="+12%" value={`${completionRate}%`} />
+      </div>
+
+      <div className="calendar-filter-bar" aria-label="日历筛选">
+        {calendarFilters.map((filterItem) => {
+          const Icon = filterItem.icon;
+          return (
+            <button
+              className={activeCalendarFilter === filterItem.value ? "calendar-filter-chip calendar-filter-chip--active" : "calendar-filter-chip"}
+              key={filterItem.value}
+              onClick={() => setActiveCalendarFilter(filterItem.value)}
+              type="button"
+            >
+              <Icon aria-hidden="true" />
+              {filterItem.label}
+            </button>
+          );
+        })}
+        <button className="calendar-add-button" onClick={() => openComposer(selectedDate)} type="button">
+          <Plus aria-hidden="true" />
+          添加日程
+        </button>
+      </div>
+
+      <div className="calendar-workbench">
+        <aside className="calendar-agenda-rail">
+          <section className="agenda-card">
+            <div className="agenda-card-title">
+              <h3>今日安排 <span>{todayEvents.length}</span></h3>
+              <small>{formatDateLabel(todayKey).replace("2026年", "")}</small>
+            </div>
+            <div className="agenda-list">
+              {todayEvents.length === 0 ? (
+                <button className="agenda-empty" onClick={() => openComposer(todayKey)} type="button">今天暂无安排，添加一项</button>
+              ) : (
+                todayEvents.map((event) => (
+                  <button className={`agenda-item schedule-category--${event.category}`} key={event.id} onClick={() => showEventDetail(event)} type="button">
+                    <span>{eventTypeIcon(event.eventType)}</span>
+                    <strong>{event.title}</strong>
+                    <small>{event.startTime}{event.endTime ? ` - ${event.endTime}` : ""}</small>
+                    <em>{eventTypeLabel(event.eventType)}</em>
+                  </button>
+                ))
+              )}
+            </div>
+            <button className="agenda-link" onClick={() => selectDay(todayKey)} type="button">查看全天日程</button>
+          </section>
+
+          <section className="agenda-card">
+            <div className="agenda-card-title">
+              <h3>即将到来 <span>{upcomingEvents.length}</span></h3>
+            </div>
+            <div className="upcoming-list">
+              {upcomingEvents.map((event) => (
+                <button className={`upcoming-item schedule-category--${event.category}`} key={event.id} onClick={() => showEventDetail(event)} type="button">
+                  <span>{eventTypeIcon(event.eventType)}</span>
+                  <div>
+                    <small>{formatDateLabel(event.date).replace("2026年", "")}</small>
+                    <strong>{event.title}</strong>
+                    <em>{event.startTime}{event.endTime ? ` - ${event.endTime}` : ""}</em>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <button className="agenda-link" onClick={() => setActiveCalendarFilter("all")} type="button">查看全部日程</button>
+          </section>
+        </aside>
+
+        <div className="calendar-main calendar-month-card">
+          <div className="calendar-toolbar">
+            <div className="calendar-controls">
+              <button aria-label="上个月" onClick={() => shiftMonth(-1)} type="button">‹</button>
+              <button aria-label="下个月" onClick={() => shiftMonth(1)} type="button">›</button>
+            </div>
             <h3>{monthLabel}</h3>
-          </div>
-          <div className="calendar-controls">
-            <button onClick={() => openComposer(selectedDate)} type="button">新建日程</button>
             <button onClick={goToday} type="button">今天</button>
-            <button aria-label="上个月" onClick={() => shiftMonth(-1)} type="button">‹</button>
-            <button aria-label="下个月" onClick={() => shiftMonth(1)} type="button">›</button>
+          </div>
+
+          <div className="calendar-grid" aria-label="Offer 日历月视图">
+            {weekdayLabels.map((day) => (
+              <div className="calendar-weekday" key={day}>周{day}</div>
+            ))}
+            {calendarDays.map((day) => {
+              const dayEvents = sortCalendarEvents(filteredEvents.filter((event) => event.date === day.key));
+              return (
+                <button
+                  className={[
+                    "calendar-day",
+                    day.isCurrentMonth ? "" : "calendar-day--muted",
+                    day.key === selectedDate ? "calendar-day--selected" : "",
+                    day.key === todayKey ? "calendar-day--today" : "",
+                  ].filter(Boolean).join(" ")}
+                  key={day.key}
+                  onClick={() => selectDay(day.key)}
+                  onDoubleClick={() => handleDayDoubleClick(day.key)}
+                  type="button"
+                >
+                  <span className="calendar-day-number">{day.date.getDate()}</span>
+                  <div className="calendar-events">
+                    {dayEvents.slice(0, 3).map((event) => (
+                      <span className={`calendar-event schedule-category--${event.category}`} key={event.id}>
+                        <i>{event.startTime || "全天"}</i>
+                        {event.title}
+                      </span>
+                    ))}
+                    {dayEvents.length > 3 && <span className="calendar-more">+{dayEvents.length - 3}</span>}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        <div className="calendar-grid" aria-label="面试日历月视图">
-          {weekdayLabels.map((day) => (
-            <div className="calendar-weekday" key={day}>周{day}</div>
-          ))}
-          {calendarDays.map((day) => {
-            const dayEvents = sortCalendarEvents(events.filter((event) => event.date === day.key));
-            return (
-              <button
-                className={[
-                  "calendar-day",
-                  day.isCurrentMonth ? "" : "calendar-day--muted",
-                  day.key === selectedDate ? "calendar-day--selected" : "",
-                  day.key === toDateKey(today) ? "calendar-day--today" : "",
-                ].filter(Boolean).join(" ")}
-                key={day.key}
-                onClick={() => selectDay(day.key)}
-                onDoubleClick={() => handleDayDoubleClick(day.key)}
-                type="button"
-              >
-                <span className="calendar-day-number">{day.date.getDate()}</span>
-                <div className="calendar-events">
-                  {dayEvents.slice(0, 3).map((event) => (
-                    <span className={`calendar-event schedule-category--${event.category}`} key={event.id}>
-                      {event.startTime && <i>{event.startTime}</i>}
-                      {event.title}
-                    </span>
-                  ))}
-                  {dayEvents.length > 3 && <span className="calendar-more">+{dayEvents.length - 3} 项</span>}
+        <aside className="calendar-detail-panel calendar-assist-panel">
+          {panelMode === "createEvent" || panelMode === "editEvent" ? (
+            <ScheduleEventForm
+              draft={eventDraft}
+              error={formError}
+              mode={panelMode}
+              onCancel={closePanel}
+              onChange={handleCalendarDraftChange}
+              onSubmit={submitEvent}
+            />
+          ) : panelMode === "eventDetail" && activeEvent ? (
+            <ScheduleEventDetail
+              event={activeEvent}
+              onBack={closePanel}
+              onDelete={() => handleEventDeleteFromDetail(activeEvent)}
+              onEdit={() => startEditEvent(activeEvent)}
+            />
+          ) : (
+            <>
+              <SelectedDayEvents
+                events={selectedEvents}
+                selectedDate={selectedDate}
+                onAdd={() => openComposer(selectedDate)}
+                onSelect={showEventDetail}
+              />
+              <div className="calendar-tip-card">
+                <div className="calendar-tip-figure" aria-hidden="true">
+                  <CalendarDays />
+                  <Bell />
                 </div>
-              </button>
-            );
-          })}
-        </div>
+                <strong>保持日程更新，不错过每一个机会！</strong>
+                <p><CheckCircle2 aria-hidden="true" />及时添加笔试、面试与截止日</p>
+                <p><Bell aria-hidden="true" />设置提醒，避免错过时间</p>
+                <p><MapPin aria-hidden="true" />合理安排时间，提升成功率</p>
+                <button onClick={() => openComposer(selectedDate)} type="button">去添加日程</button>
+              </div>
+            </>
+          )}
+        </aside>
       </div>
-
-      <aside className="calendar-detail-panel">
-        {panelMode === "createEvent" || panelMode === "editEvent" ? (
-          <ScheduleEventForm
-            draft={eventDraft}
-            error={formError}
-            mode={panelMode}
-            onCancel={closePanel}
-            onChange={handleCalendarDraftChange}
-            onSubmit={submitEvent}
-          />
-        ) : panelMode === "eventDetail" && activeEvent ? (
-          <ScheduleEventDetail
-            event={activeEvent}
-            onBack={closePanel}
-            onDelete={() => handleEventDeleteFromDetail(activeEvent)}
-            onEdit={() => startEditEvent(activeEvent)}
-          />
-        ) : (
-          <SelectedDayEvents
-            events={selectedEvents}
-            selectedDate={selectedDate}
-            onAdd={() => openComposer(selectedDate)}
-            onSelect={showEventDetail}
-          />
-        )}
-      </aside>
       {calendarNotice && <p className="calendar-toast" role="status">{calendarNotice}</p>}
 
       {pendingCalendarAction && (
@@ -2063,6 +2172,31 @@ function CalendarPlanner({
         />
       )}
     </section>
+  );
+}
+
+function CalendarSummaryCard({
+  color,
+  icon: Icon,
+  label,
+  trend,
+  value,
+}: {
+  color: string;
+  icon: IconComponent;
+  label: string;
+  trend: string;
+  value: number | string;
+}) {
+  return (
+    <article className={`calendar-summary-card calendar-summary-card--${color}`}>
+      <span><Icon aria-hidden="true" /></span>
+      <div>
+        <small>{label}</small>
+        <strong>{value}</strong>
+        <em>较上月 {trend}</em>
+      </div>
+    </article>
   );
 }
 
@@ -3382,47 +3516,228 @@ function JobsTable({
   );
 }
 
+function OfferTrackingPage({
+  filter,
+  form,
+  formMessage,
+  isEditing,
+  onChange,
+  onClearFilter,
+  onEdit,
+  onFilterChange,
+  onRemove,
+  onResetForm,
+  onSubmit,
+  records,
+}: {
+  filter: string;
+  form: ApplicationRecord;
+  formMessage: string;
+  isEditing: boolean;
+  onChange: <K extends keyof ApplicationRecord>(key: K, value: ApplicationRecord[K]) => void;
+  onClearFilter: () => void;
+  onEdit: (record: ApplicationRecord) => void;
+  onFilterChange: (filter: string) => void;
+  onRemove: (id: string) => void;
+  onResetForm: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  records: ApplicationRecord[];
+}) {
+  const weeklyRecords = records.filter((record) => {
+    if (!record.applyDate) return false;
+    return dateInRange(record.applyDate, new Date("2026-07-21T00:00:00"), new Date(`${dashboardTodayKey}T23:59:59`));
+  });
+  const staleRecords = records.filter((record) => record.needsFollowUp === "是" && record.status !== "已结束");
+  const incompleteRecords = records
+    .filter((record) => !record.jd || !record.nextAction || !record.nextDeadline || !record.applyUrl)
+    .slice(0, 3);
+  const stageItems = [
+    { key: "收藏中", label: "已收藏", index: "01", icon: Star },
+    { key: "已投递", label: "已投递", index: "02", icon: Send },
+    { key: "笔试中", label: "笔试", index: "03", icon: NotebookPen },
+    { key: "面试中", label: "面试", index: "04", icon: UsersRound },
+    { key: "Offer", label: "Offer", index: "05", icon: Award },
+    { key: "已结束", label: "结果", index: "06", icon: Flag },
+  ];
+
+  return (
+    <section className="tracking-page">
+      <div className="tracking-title-row">
+        <div className="tracking-title-icon">
+          <ShieldCheck aria-hidden="true" />
+        </div>
+        <div>
+          <h2>Offer 跟进</h2>
+          <p>记录每一次投递与流程进展，形成完整求职档案</p>
+        </div>
+      </div>
+
+      <nav className="tracking-stage-card" aria-label="求职流程筛选">
+        {stageItems.map((stage) => {
+          const Icon = stage.icon;
+          const count = records.filter((record) => applicationMatchesFilter(record, stage.key)).length;
+          return (
+            <button
+              className={filter === stage.key ? "tracking-stage tracking-stage--active" : "tracking-stage"}
+              key={stage.key}
+              onClick={() => onFilterChange(stage.key)}
+              type="button"
+            >
+              <span><Icon aria-hidden="true" /></span>
+              <strong>{stage.label}</strong>
+              <small>{stage.index}</small>
+              <em>{count}</em>
+            </button>
+          );
+        })}
+      </nav>
+
+      <div className="tracking-layout">
+        <div className="tracking-main-column">
+          <ApplicationForm
+            form={form}
+            formMessage={formMessage}
+            isEditing={isEditing}
+            onChange={onChange}
+            onReset={onResetForm}
+            onSubmit={onSubmit}
+          />
+          <ApplicationRecords
+            filter={filter}
+            records={records}
+            onClearFilter={onClearFilter}
+            onEdit={onEdit}
+            onRemove={onRemove}
+          />
+        </div>
+
+        <aside className="tracking-side-column">
+          <section className="tracking-side-card tracking-side-card--chart">
+            <div>
+              <h3>本周新增记录</h3>
+              <strong>{weeklyRecords.length}</strong>
+              <p>较上周 <span className={weeklyRecords.length > 0 ? "trend-up" : ""}>{weeklyRecords.length > 0 ? `+${weeklyRecords.length}` : "0"} 条</span></p>
+            </div>
+            <MiniSparkline values={[2, 4, 3, 5, 7, 10, Math.max(weeklyRecords.length, 4)]} />
+          </section>
+
+          <section className="tracking-side-card tracking-side-card--hourglass">
+            <div>
+              <h3>待更新流程</h3>
+              <strong>{staleRecords.length}</strong>
+              <p>需要补下一步或截止时间</p>
+            </div>
+            <Hourglass aria-hidden="true" />
+          </section>
+
+          <section className="tracking-side-card tracking-incomplete-card">
+            <div className="side-card-title">
+              <h3>信息待完善（{incompleteRecords.length}）</h3>
+              <button onClick={() => onFilterChange("全部")} type="button">查看全部</button>
+            </div>
+            {incompleteRecords.length === 0 ? (
+              <p className="side-empty">当前记录信息完整。</p>
+            ) : (
+              incompleteRecords.map((record) => (
+                <article key={record.id}>
+                  <span aria-hidden="true"><FileText /></span>
+                  <div>
+                    <strong>{record.company} · {record.role}</strong>
+                    <small>{!record.jd ? "缺少 JD" : !record.applyUrl ? "缺少网申链接" : "缺少下一步"}</small>
+                  </div>
+                  <button onClick={() => onEdit(record)} type="button">去完善</button>
+                </article>
+              ))
+            )}
+          </section>
+
+          <section className="tracking-illustration-card">
+            <div>
+              <strong>每一次记录，都是迈向 Offer 的一步！</strong>
+              <p>坚持记录，成功更近一步。</p>
+            </div>
+            <div className="tracking-figure" aria-hidden="true">
+              <ClipboardList />
+              <span />
+            </div>
+          </section>
+        </aside>
+      </div>
+    </section>
+  );
+}
+
+function MiniSparkline({ values }: { values: number[] }) {
+  const max = Math.max(...values, 1);
+  const points = values
+    .map((value, index) => {
+      const x = 16 + index * (168 / Math.max(values.length - 1, 1));
+      const y = 96 - (value / max) * 72;
+      return `${x},${y}`;
+    })
+    .join(" ");
+
+  return (
+    <svg className="mini-sparkline" viewBox="0 0 210 112" role="img" aria-label="本周新增记录趋势">
+      <path d={`M16 100 L${points} L194 100 Z`} fill="rgba(82, 99, 245, 0.12)" />
+      <polyline points={points} fill="none" stroke="#5263f5" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" />
+      {values.map((value, index) => {
+        const x = 16 + index * (168 / Math.max(values.length - 1, 1));
+        const y = 96 - (value / max) * 72;
+        return <circle cx={x} cy={y} fill="#ffffff" key={`${value}-${index}`} r="4" stroke="#5263f5" strokeWidth="2" />;
+      })}
+    </svg>
+  );
+}
+
 function ApplicationForm({
   form,
   formMessage,
+  isEditing,
   onChange,
+  onReset,
   onSubmit,
 }: {
   form: ApplicationRecord;
   formMessage: string;
+  isEditing: boolean;
   onChange: <K extends keyof ApplicationRecord>(key: K, value: ApplicationRecord[K]) => void;
+  onReset: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
     <form className="application-form" onSubmit={onSubmit}>
       <div className="form-heading">
-        <span>Application questionnaire</span>
-        <h3>填写一次，生成一条自己的投递记录。</h3>
-        <p>字段参考你的秋招信息追踪表，先覆盖公司、岗位、投递、笔试面试和 offer 关键状态。</p>
+        <div>
+          <span>新增 / 更新求职记录</span>
+          <h3>{isEditing ? "编辑当前求职记录" : "新增一条完整求职记录"}</h3>
+        </div>
+        {isEditing && <button onClick={onReset} type="button">退出编辑</button>}
       </div>
 
       <div className="form-section">
         <h4>基础信息</h4>
+        <Field label="序号" readOnly value={form.id || "保存后自动生成"} onChange={() => undefined} />
         <Field label="公司" required value={form.company} onChange={(value) => onChange("company", value)} />
         <Field label="岗位名称" required value={form.role} onChange={(value) => onChange("role", value)} />
         <Field label="岗位方向" value={form.direction} onChange={(value) => onChange("direction", value)} />
+        <SelectField label="公司类型" value={form.companyType} options={["互联网", "央国企", "外企", "民营企业", "高校/科研", "其他"]} onChange={(value) => onChange("companyType", value)} />
         <Field label="行业" value={form.industry} onChange={(value) => onChange("industry", value)} />
         <Field label="工作地点" value={form.location} onChange={(value) => onChange("location", value)} />
-        <SelectField label="公司类型" value={form.companyType} options={["互联网", "央国企", "外企", "民营企业", "高校/科研", "其他"]} onChange={(value) => onChange("companyType", value)} />
+        <SelectField label="招聘类型" value={form.recruitType} options={["2027届秋招", "实习提前批", "暑期实习", "日常实习", "补录"]} onChange={(value) => onChange("recruitType", value)} />
       </div>
 
       <div className="form-section">
-        <h4>投递状态</h4>
-        <SelectField label="招聘类型" value={form.recruitType} options={["2027届秋招", "实习提前批", "暑期实习", "日常实习", "补录"]} onChange={(value) => onChange("recruitType", value)} />
+        <h4>投递信息</h4>
         <SelectField label="投递渠道" value={form.channel} options={["官网", "内推", "公众号", "牛客", "腾讯文档", "其他"]} onChange={(value) => onChange("channel", value)} />
         <Field label="投递日期" type="date" value={form.applyDate} onChange={(value) => onChange("applyDate", value)} />
-        <SelectField label="当前状态" value={form.status} options={["准备投递", "已投递", "测评中", "笔试中", "面试中", "Offer", "已结束"]} onChange={(value) => onChange("status", value)} />
-        <SelectField label="优先级" value={form.priority} options={["P0", "P1", "P2", "P3"]} onChange={(value) => onChange("priority", value)} />
-        <SelectField label="意向程度" value={form.interest} options={["高", "中", "低", "观望"]} onChange={(value) => onChange("interest", value)} />
+        <Field label="信息来源" value={form.source} onChange={(value) => onChange("source", value)} />
+        <Field label="网申链接" type="url" value={form.applyUrl} onChange={(value) => onChange("applyUrl", value)} />
       </div>
 
       <div className="form-section">
         <h4>流程跟进</h4>
+        <SelectField label="当前状态" value={form.status} options={["准备投递", "已投递", "测评中", "笔试中", "面试中", "Offer", "已结束"]} onChange={(value) => onChange("status", value)} />
         <Field label="最新进展" value={form.progress} onChange={(value) => onChange("progress", value)} />
         <Field label="下一步事项" value={form.nextAction} onChange={(value) => onChange("nextAction", value)} />
         <Field label="下一步截止时间" type="datetime-local" value={form.nextDeadline} onChange={(value) => onChange("nextDeadline", value)} />
@@ -3435,15 +3750,20 @@ function ApplicationForm({
         <SelectField label="面试结果" value={form.interviewResult} options={["待确认", "通过", "未通过", "等待反馈"]} onChange={(value) => onChange("interviewResult", value)} />
       </div>
 
-      <div className="form-section form-section--wide">
-        <h4>链接与 offer</h4>
-        <Field label="信息来源" value={form.source} onChange={(value) => onChange("source", value)} />
-        <Field label="网申链接" type="url" value={form.applyUrl} onChange={(value) => onChange("applyUrl", value)} />
-        <Field label="简历版本" value={form.resumeVersion} onChange={(value) => onChange("resumeVersion", value)} />
+      <div className="form-section">
+        <h4>Offer 信息</h4>
         <SelectField label="Offer情况" value={form.offerStatus} options={["暂无", "已收到", "已拒绝", "已接受", "等待中"]} onChange={(value) => onChange("offerStatus", value)} />
         <Field label="Offer截止日期" type="date" value={form.offerDeadline} onChange={(value) => onChange("offerDeadline", value)} />
         <Field label="薪资（年包）" value={form.salary} onChange={(value) => onChange("salary", value)} />
         <Field label="Base城市" value={form.baseCity} onChange={(value) => onChange("baseCity", value)} />
+        <SelectField label="是否接受" value={form.offerStatus === "已接受" ? "已接受" : "未确定"} options={["未确定", "已接受", "已拒绝"]} onChange={(value) => onChange("offerStatus", value === "未确定" ? form.offerStatus : value)} />
+        <SelectField label="优先级" value={form.priority} options={["P0", "P1", "P2", "P3"]} onChange={(value) => onChange("priority", value)} />
+        <SelectField label="意向程度" value={form.interest} options={["高", "中", "低", "观望"]} onChange={(value) => onChange("interest", value)} />
+      </div>
+
+      <div className="form-section form-section--wide">
+        <h4>备注</h4>
+        <Field label="简历版本" value={form.resumeVersion} onChange={(value) => onChange("resumeVersion", value)} />
         <label className="field field--textarea">
           JD
           <textarea value={form.jd} onChange={(event) => onChange("jd", event.target.value)} placeholder="粘贴岗位描述或关键词" />
@@ -3455,7 +3775,8 @@ function ApplicationForm({
       </div>
 
       <div className="form-actions">
-        <button type="submit">保存到我的秋招</button>
+        <button type="submit">{isEditing ? "保存修改" : "保存记录"}</button>
+        <button onClick={onReset} type="button">清空重填</button>
         {formMessage && <span>{formMessage}</span>}
       </div>
     </form>
@@ -3468,17 +3789,19 @@ function Field({
   onChange,
   type = "text",
   required = false,
+  readOnly = false,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   type?: string;
   required?: boolean;
+  readOnly?: boolean;
 }) {
   return (
     <label className="field">
       {label}
-      <input required={required} type={type} value={value} onChange={(event) => onChange(event.target.value)} />
+      <input readOnly={readOnly} required={required} type={type} value={value} onChange={(event) => onChange(event.target.value)} />
     </label>
   );
 }
@@ -3507,11 +3830,13 @@ function SelectField({
 function ApplicationRecords({
   filter,
   onClearFilter,
+  onEdit,
   records,
   onRemove,
 }: {
   filter: string;
   onClearFilter: () => void;
+  onEdit: (record: ApplicationRecord) => void;
   records: ApplicationRecord[];
   onRemove: (id: string) => void;
 }) {
@@ -3529,8 +3854,8 @@ function ApplicationRecords({
   return (
     <section className="record-panel">
       <div className="record-heading">
-        <span>Application records</span>
-        <h3>{filter === "全部" ? "我的投递记录" : `${filter}记录`}</h3>
+        <span>最近记录</span>
+        <h3>{filter === "全部" ? "最近求职记录" : `${filter}记录`}</h3>
         {filter !== "全部" && <button onClick={onClearFilter} type="button">清除筛选</button>}
       </div>
       <div className="record-list">
@@ -3553,7 +3878,8 @@ function ApplicationRecords({
             </dl>
             <div className="record-actions">
               {record.applyUrl && <a href={record.applyUrl} rel="noreferrer" target="_blank">打开网申</a>}
-              <button onClick={() => onRemove(record.id)} type="button">删除</button>
+              <button aria-label={`编辑 ${record.company} 记录`} onClick={() => onEdit(record)} type="button"><Edit3 aria-hidden="true" />编辑</button>
+              <button aria-label={`删除 ${record.company} 记录`} onClick={() => onRemove(record.id)} type="button"><Trash2 aria-hidden="true" />删除</button>
             </div>
           </article>
         ))}
@@ -3569,4 +3895,24 @@ function applicationMatchesFilter(record: ApplicationRecord, filter: string) {
   if (filter === "面试中") return record.status === "面试中" || isActiveStage(record.interview);
   if (filter === "Offer") return record.status === "Offer" || record.offerStatus !== "暂无";
   return record.status === filter;
+}
+
+function calendarEventMatchesFilter(event: CalendarEvent, filter: CalendarFilterValue) {
+  if (filter === "all") return true;
+  if (filter === "custom") return event.sourceType === "manual";
+  if (scheduleCategories.some((category) => category.value === filter)) return event.category === filter;
+  if (filter === "deadline") return event.eventType === "deadline" || event.eventType === "offer";
+  return event.eventType === filter;
+}
+
+function eventTypeIcon(eventType: CalendarEventType) {
+  if (eventType === "written") return <NotebookPen aria-hidden="true" />;
+  if (eventType === "interview") return <UsersRound aria-hidden="true" />;
+  if (eventType === "deadline") return <AlarmClock aria-hidden="true" />;
+  if (eventType === "offer") return <Award aria-hidden="true" />;
+  if (eventType === "meeting") return <UsersRound aria-hidden="true" />;
+  if (eventType === "course") return <BookOpen aria-hidden="true" />;
+  if (eventType === "thesis") return <FileText aria-hidden="true" />;
+  if (eventType === "follow") return <Flag aria-hidden="true" />;
+  return <ClipboardList aria-hidden="true" />;
 }
