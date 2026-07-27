@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 type JobStatus = "待投递" | "收藏中" | "已投递" | "面试中";
 
@@ -95,7 +95,14 @@ type CalendarEvent = {
 };
 
 type CalendarEventDraft = Omit<CalendarEvent, "id" | "source" | "createdAt" | "updatedAt">;
-type CalendarPanelMode = "list" | "create" | "detail" | "edit";
+type CalendarPanelMode = "dayList" | "createEvent" | "eventDetail" | "editEvent";
+type TodoPanelMode = "todoList" | "createTodo" | "editTodo";
+type PendingCalendarAction =
+  | { type: "close" }
+  | { type: "selectDay"; dateKey: string }
+  | { type: "today" }
+  | { type: "create"; dateKey: string }
+  | { type: "detail"; eventId: string };
 
 type CalendarTodo = {
   id: string;
@@ -378,7 +385,7 @@ export default function OfferCatApp() {
     readJsonStorage(calendarTodoStorageKey, defaultCalendarTodos, (items) => items.map(normalizeTodo)),
   );
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>(() =>
-    readJsonStorage(calendarEventStorageKey, [], (items) => items.map(normalizeCalendarEvent)),
+    readJsonStorage<CalendarEvent[]>(calendarEventStorageKey, [], (items) => items.map(normalizeCalendarEvent)),
   );
 
   useEffect(() => {
@@ -511,6 +518,10 @@ export default function OfferCatApp() {
 
   function removeCalendarEvent(id: string) {
     setCalendarEvents((current) => current.filter((event) => event.id !== id));
+  }
+
+  function updateCalendarTodo(id: string, todo: Omit<CalendarTodo, "id" | "done">) {
+    setCalendarTodos((current) => current.map((item) => (item.id === id ? { ...item, ...todo } : item)));
   }
 
   function addCalendarTodo(todo: Omit<CalendarTodo, "id" | "done">) {
@@ -676,6 +687,7 @@ export default function OfferCatApp() {
             onAddTodo={addCalendarTodo}
             onRemoveTodo={removeCalendarTodo}
             onToggleTodo={toggleCalendarTodo}
+            onUpdateTodo={updateCalendarTodo}
           />
         )}
       </section>
@@ -699,13 +711,19 @@ function CalendarPlanner({
   const today = useMemo(() => new Date(), []);
   const [visibleMonth, setVisibleMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const [selectedDate, setSelectedDate] = useState(() => toDateKey(today));
-  const [panelMode, setPanelMode] = useState<CalendarPanelMode>("list");
+  const [panelMode, setPanelMode] = useState<CalendarPanelMode>("dayList");
   const [activeEventId, setActiveEventId] = useState<string | null>(null);
   const [formError, setFormError] = useState("");
   const [eventDraft, setEventDraft] = useState<CalendarEventDraft>(() => ({
     ...blankCalendarEvent,
     date: toDateKey(today),
   }));
+  const [eventDraftBase, setEventDraftBase] = useState<CalendarEventDraft>(() => ({
+    ...blankCalendarEvent,
+    date: toDateKey(today),
+  }));
+  const [pendingCalendarAction, setPendingCalendarAction] = useState<PendingCalendarAction | null>(null);
+  const [eventToDelete, setEventToDelete] = useState<CalendarEvent | null>(null);
 
   const applicationEvents = useMemo(() => buildApplicationEvents(applications), [applications]);
   const events = useMemo(
@@ -722,53 +740,116 @@ function CalendarPlanner({
     ...category,
     count: events.filter((event) => event.category === category.value).length,
   }));
+  const isEventFormDirty = (panelMode === "createEvent" || panelMode === "editEvent") && !calendarDraftsEqual(eventDraft, eventDraftBase);
 
   function shiftMonth(offset: number) {
     setVisibleMonth((current) => new Date(current.getFullYear(), current.getMonth() + offset, 1));
   }
 
   function openComposer(dateKey = selectedDate) {
+    const nextAction: PendingCalendarAction = { type: "create", dateKey };
+    if (guardDirtyCalendarAction(nextAction)) return;
+    applyCalendarAction(nextAction);
+  }
+
+  function applyOpenComposer(dateKey = selectedDate) {
+    const nextDraft = {
+      ...blankCalendarEvent,
+      date: dateKey,
+    };
     setSelectedDate(dateKey);
     setActiveEventId(null);
     setFormError("");
-    setEventDraft({
-      ...blankCalendarEvent,
-      date: dateKey,
-    });
-    setPanelMode("create");
+    setEventDraft(nextDraft);
+    setEventDraftBase(nextDraft);
+    setPanelMode("createEvent");
   }
 
   function selectDay(dateKey: string) {
+    const nextAction: PendingCalendarAction = { type: "selectDay", dateKey };
+    if (guardDirtyCalendarAction(nextAction)) return;
+    applyCalendarAction(nextAction);
+  }
+
+  function applySelectDay(dateKey: string) {
     setSelectedDate(dateKey);
     setActiveEventId(null);
-    setPanelMode("list");
+    setPanelMode("dayList");
     setFormError("");
   }
 
   function goToday() {
-    const todayKey = toDateKey(today);
-    setVisibleMonth(new Date(today.getFullYear(), today.getMonth(), 1));
-    selectDay(todayKey);
+    const nextAction: PendingCalendarAction = { type: "today" };
+    if (guardDirtyCalendarAction(nextAction)) return;
+    applyCalendarAction(nextAction);
   }
 
   function showEventDetail(event: CalendarEvent) {
+    const nextAction: PendingCalendarAction = { type: "detail", eventId: event.id };
+    if (guardDirtyCalendarAction(nextAction)) return;
+    applyCalendarAction(nextAction);
+  }
+
+  function applyShowEventDetail(event: CalendarEvent) {
     setSelectedDate(event.date);
     setActiveEventId(event.id);
-    setPanelMode("detail");
+    setPanelMode("eventDetail");
     setFormError("");
   }
 
   function startEditEvent(event: CalendarEvent) {
+    const nextDraft = calendarEventToDraft(event);
     setActiveEventId(event.id);
-    setEventDraft(calendarEventToDraft(event));
-    setPanelMode("edit");
+    setEventDraft(nextDraft);
+    setEventDraftBase(nextDraft);
+    setPanelMode("editEvent");
     setFormError("");
   }
 
   function closePanel() {
-    setPanelMode("list");
+    const nextAction: PendingCalendarAction = { type: "close" };
+    if (guardDirtyCalendarAction(nextAction)) return;
+    applyCalendarAction(nextAction);
+  }
+
+  function applyClosePanel() {
+    setPanelMode("dayList");
     setActiveEventId(null);
     setFormError("");
+  }
+
+  function guardDirtyCalendarAction(action: PendingCalendarAction) {
+    if (!isEventFormDirty) return false;
+    setPendingCalendarAction(action);
+    return true;
+  }
+
+  function applyCalendarAction(action: PendingCalendarAction) {
+    setPendingCalendarAction(null);
+    if (action.type === "close") {
+      applyClosePanel();
+      return;
+    }
+    if (action.type === "selectDay") {
+      applySelectDay(action.dateKey);
+      return;
+    }
+    if (action.type === "today") {
+      const todayKey = toDateKey(today);
+      setVisibleMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+      applySelectDay(todayKey);
+      return;
+    }
+    if (action.type === "create") {
+      applyOpenComposer(action.dateKey);
+      return;
+    }
+    const event = events.find((item) => item.id === action.eventId);
+    if (event) applyShowEventDetail(event);
+  }
+
+  function confirmDiscardCalendarChanges() {
+    if (pendingCalendarAction) applyCalendarAction(pendingCalendarAction);
   }
 
   function submitEvent(event: FormEvent<HTMLFormElement>) {
@@ -787,7 +868,7 @@ function CalendarPlanner({
       description: submittedDraft.description?.trim() || "",
     };
 
-    if (panelMode === "edit" && activeEventId) {
+    if (panelMode === "editEvent" && activeEventId) {
       onUpdateEvent(activeEventId, nextEvent);
     } else {
       onAddEvent(nextEvent);
@@ -798,15 +879,46 @@ function CalendarPlanner({
       ...blankCalendarEvent,
       date: submittedDraft.date,
     });
-    setPanelMode("list");
+    setEventDraftBase({
+      ...blankCalendarEvent,
+      date: submittedDraft.date,
+    });
+    setPanelMode("dayList");
     setActiveEventId(null);
     setFormError("");
   }
 
-  function deleteActiveEvent(event: CalendarEvent) {
+  function confirmDeleteEvent(event: CalendarEvent) {
+    setEventToDelete(event);
+  }
+
+  function deleteActiveEvent() {
+    if (!eventToDelete) return;
+    setSelectedDate(eventToDelete.date);
+    onRemoveEvent(eventToDelete.id);
+    setEventToDelete(null);
+    applyClosePanel();
+  }
+
+  function cancelDeleteEvent() {
+    setEventToDelete(null);
+  }
+
+  function handleCalendarDraftChange(nextDraft: CalendarEventDraft | ((current: CalendarEventDraft) => CalendarEventDraft)) {
+    setEventDraft(nextDraft);
+  }
+
+  function handleDiscardStay() {
+    setPendingCalendarAction(null);
+  }
+
+  function handleDayDoubleClick(dateKey: string) {
+    openComposer(dateKey);
+  }
+
+  function handleEventDeleteFromDetail(event: CalendarEvent) {
     setSelectedDate(event.date);
-    onRemoveEvent(event.id);
-    closePanel();
+    confirmDeleteEvent(event);
   }
 
   return (
@@ -863,7 +975,7 @@ function CalendarPlanner({
                 ].filter(Boolean).join(" ")}
                 key={day.key}
                 onClick={() => selectDay(day.key)}
-                onDoubleClick={() => openComposer(day.key)}
+                onDoubleClick={() => handleDayDoubleClick(day.key)}
                 type="button"
               >
                 <span className="calendar-day-number">{day.date.getDate()}</span>
@@ -883,20 +995,20 @@ function CalendarPlanner({
       </div>
 
       <aside className="calendar-detail-panel">
-        {panelMode === "create" || panelMode === "edit" ? (
+        {panelMode === "createEvent" || panelMode === "editEvent" ? (
           <ScheduleEventForm
             draft={eventDraft}
             error={formError}
             mode={panelMode}
             onCancel={closePanel}
-            onChange={setEventDraft}
+            onChange={handleCalendarDraftChange}
             onSubmit={submitEvent}
           />
-        ) : panelMode === "detail" && activeEvent ? (
+        ) : panelMode === "eventDetail" && activeEvent ? (
           <ScheduleEventDetail
             event={activeEvent}
             onBack={closePanel}
-            onDelete={activeEvent.source === "手动新建" ? () => deleteActiveEvent(activeEvent) : undefined}
+            onDelete={activeEvent.source === "手动新建" ? () => handleEventDeleteFromDetail(activeEvent) : undefined}
             onEdit={activeEvent.source === "手动新建" ? () => startEditEvent(activeEvent) : undefined}
           />
         ) : (
@@ -908,6 +1020,29 @@ function CalendarPlanner({
           />
         )}
       </aside>
+
+      {pendingCalendarAction && (
+        <ConfirmDialog
+          cancelLabel="继续编辑"
+          confirmLabel="放弃修改"
+          message="当前内容尚未保存，确定要放弃修改吗？"
+          onCancel={handleDiscardStay}
+          onConfirm={confirmDiscardCalendarChanges}
+          title="未保存的日程"
+        />
+      )}
+
+      {eventToDelete && (
+        <ConfirmDialog
+          cancelLabel="取消"
+          confirmLabel="确认删除"
+          danger
+          message="确定删除该日程吗？删除后无法恢复。"
+          onCancel={cancelDeleteEvent}
+          onConfirm={deleteActiveEvent}
+          title="删除日程"
+        />
+      )}
     </section>
   );
 }
@@ -1032,7 +1167,7 @@ function ScheduleEventForm({
 }: {
   draft: CalendarEventDraft;
   error: string;
-  mode: "create" | "edit";
+  mode: "createEvent" | "editEvent";
   onCancel: () => void;
   onChange: (draft: CalendarEventDraft | ((current: CalendarEventDraft) => CalendarEventDraft)) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -1041,10 +1176,10 @@ function ScheduleEventForm({
     <form className="event-composer" onSubmit={onSubmit}>
       <div className="panel-title-row">
         <div>
-          <span>{mode === "edit" ? "编辑日程" : "新增日程"}</span>
-          <h3>{mode === "edit" ? "调整日程信息" : "创建新的日历节点"}</h3>
+          <span>{mode === "editEvent" ? "编辑日程" : "新增日程"}</span>
+          <h3>{mode === "editEvent" ? "调整日程信息" : "创建新的日历节点"}</h3>
         </div>
-        <button onClick={onCancel} type="button">关闭</button>
+        <button aria-label="关闭日程表单" className="icon-close-button" onClick={onCancel} title="关闭" type="button">×</button>
       </div>
 
       <label className="composer-field composer-field--wide">
@@ -1186,41 +1321,117 @@ function OfferTodoPage({
   onAddTodo,
   onRemoveTodo,
   onToggleTodo,
+  onUpdateTodo,
 }: {
   todos: CalendarTodo[];
   onAddTodo: (todo: Omit<CalendarTodo, "id" | "done">) => void;
   onRemoveTodo: (id: string) => void;
   onToggleTodo: (id: string) => void;
+  onUpdateTodo: (id: string, todo: Omit<CalendarTodo, "id" | "done">) => void;
 }) {
   const todayKey = toDateKey(new Date());
-  const [isAdding, setIsAdding] = useState(false);
-  const [todoDraft, setTodoDraft] = useState<Omit<CalendarTodo, "id" | "done">>({
-    title: "",
-    due: todayKey,
-    kind: "todo",
-    priority: "P1",
-    owner: "我",
-  });
+  const [panelMode, setPanelMode] = useState<TodoPanelMode>("todoList");
+  const [editingTodoId, setEditingTodoId] = useState<string | null>(null);
+  const [todoDraft, setTodoDraft] = useState<Omit<CalendarTodo, "id" | "done">>(() => blankTodoDraft(todayKey));
+  const [todoDraftBase, setTodoDraftBase] = useState<Omit<CalendarTodo, "id" | "done">>(() => blankTodoDraft(todayKey));
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const [todoToDelete, setTodoToDelete] = useState<CalendarTodo | null>(null);
   const openTodos = todos.filter((todo) => !todo.done);
   const overdueTodos = openTodos.filter((todo) => todo.due < todayKey);
   const p0Todos = openTodos.filter((todo) => todo.priority === "P0");
+  const sortedTodos = todos
+    .map(normalizeTodo)
+    .slice()
+    .sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority) || a.due.localeCompare(b.due));
+  const isTodoFormOpen = panelMode === "createTodo" || panelMode === "editTodo";
+  const isTodoDirty = isTodoFormOpen && !todoDraftsEqual(todoDraft, todoDraftBase);
+
+  const clearTodoForm = useCallback(() => {
+    const nextDraft = blankTodoDraft(todayKey);
+    setTodoDraft(nextDraft);
+    setTodoDraftBase(nextDraft);
+    setEditingTodoId(null);
+    setPanelMode("todoList");
+    setShowDiscardConfirm(false);
+  }, [todayKey]);
+
+  const requestCloseTodoForm = useCallback(() => {
+    if (isTodoDirty) {
+      setShowDiscardConfirm(true);
+      return;
+    }
+    clearTodoForm();
+  }, [clearTodoForm, isTodoDirty]);
+
+  useEffect(() => {
+    if (!isTodoFormOpen) return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") requestCloseTodoForm();
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isTodoFormOpen, requestCloseTodoForm]);
+
+  function openCreateTodo() {
+    const nextDraft = blankTodoDraft(todayKey);
+    setTodoDraft(nextDraft);
+    setTodoDraftBase(nextDraft);
+    setEditingTodoId(null);
+    setPanelMode("createTodo");
+  }
+
+  function openEditTodo(todo: CalendarTodo) {
+    const normalized = normalizeTodo(todo);
+    const nextDraft = {
+      title: normalized.title,
+      due: normalized.due,
+      kind: normalized.kind,
+      priority: normalized.priority,
+      owner: normalized.owner,
+    };
+    setTodoDraft(nextDraft);
+    setTodoDraftBase(nextDraft);
+    setEditingTodoId(todo.id);
+    setPanelMode("editTodo");
+  }
+
+  function discardTodoChanges() {
+    clearTodoForm();
+  }
 
   function submitTodo(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!todoDraft.title.trim()) return;
 
-    onAddTodo({
+    const nextTodo = {
       ...todoDraft,
       title: todoDraft.title.trim(),
-    });
-    setTodoDraft({
-      title: "",
-      due: todayKey,
-      kind: "todo",
-      priority: "P1",
-      owner: "我",
-    });
-    setIsAdding(false);
+      owner: todoDraft.owner.trim() || "我",
+    };
+
+    if (panelMode === "editTodo" && editingTodoId) {
+      onUpdateTodo(editingTodoId, nextTodo);
+    } else {
+      onAddTodo(nextTodo);
+    }
+
+    clearTodoForm();
+  }
+
+  function requestDeleteTodo(todo: CalendarTodo) {
+    setTodoToDelete(todo);
+  }
+
+  function confirmDeleteTodo() {
+    if (!todoToDelete) return;
+    onRemoveTodo(todoToDelete.id);
+    setTodoToDelete(null);
+  }
+
+  function cancelDeleteTodo() {
+    setTodoToDelete(null);
   }
 
   return (
@@ -1239,57 +1450,11 @@ function OfferTodoPage({
             <h3>事项明细</h3>
           </div>
           <div className="todo-toolbar-actions">
-            <button onClick={() => setIsAdding((current) => !current)} type="button">+ 添加记录</button>
+            <button onClick={openCreateTodo} type="button">+ 添加记录</button>
             <button type="button">筛选</button>
             <button type="button">排序</button>
           </div>
         </div>
-
-        {isAdding && (
-          <form className="todo-entry-form" onSubmit={submitTodo}>
-            <input
-              aria-label="待办事项"
-              placeholder="待办事项，例如：准备腾讯一面自我介绍"
-              value={todoDraft.title}
-              onChange={(event) => setTodoDraft((current) => ({ ...current, title: event.target.value }))}
-            />
-            <input
-              aria-label="Todo 截止日期"
-              type="date"
-              value={todoDraft.due}
-              onChange={(event) => setTodoDraft((current) => ({ ...current, due: event.target.value }))}
-            />
-            <select
-              aria-label="Todo 类型"
-              value={todoDraft.kind}
-              onChange={(event) => setTodoDraft((current) => ({ ...current, kind: event.target.value as CalendarEventKind }))}
-            >
-              <option value="todo">Todo</option>
-              <option value="deadline">投递截止</option>
-              <option value="interview">面试</option>
-              <option value="written">笔试/测评</option>
-              <option value="follow">跟进</option>
-              <option value="offer">Offer</option>
-            </select>
-            <select
-              aria-label="优先级"
-              value={todoDraft.priority}
-              onChange={(event) => setTodoDraft((current) => ({ ...current, priority: event.target.value as CalendarTodo["priority"] }))}
-            >
-              <option value="P0">P0-高优</option>
-              <option value="P1">P1-重要</option>
-              <option value="P2">P2-普通</option>
-              <option value="P3">P3-低优</option>
-            </select>
-            <input
-              aria-label="执行人"
-              placeholder="执行人"
-              value={todoDraft.owner}
-              onChange={(event) => setTodoDraft((current) => ({ ...current, owner: event.target.value }))}
-            />
-            <button type="submit">保存</button>
-          </form>
-        )}
 
         <div className="todo-data-table">
           <div className="todo-data-head">
@@ -1301,25 +1466,197 @@ function OfferTodoPage({
             <span>执行人</span>
             <span>操作</span>
           </div>
-          {todos
-            .slice()
-            .sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority) || a.due.localeCompare(b.due))
-            .map((todo) => (
+          {sortedTodos.length === 0 ? (
+            <div className="todo-empty-state">
+              <strong>暂无待办事项</strong>
+              <p>把投递准备、复盘提醒和截止动作放进这里。</p>
+              <button onClick={openCreateTodo} type="button">新建 Todo</button>
+            </div>
+          ) : (
+            sortedTodos.map((todo) => (
               <article className={`todo-data-row todo-data-row--${todo.kind} ${todo.done ? "todo-data-row--done" : ""}`} key={todo.id}>
                 <strong>{todo.title}</strong>
                 <span>{formatDateLabel(todo.due)}</span>
                 <span>{distanceLabel(todo.due, todayKey)}</span>
-                <button aria-label={todo.done ? "标记为未完成" : "标记为已完成"} onClick={() => onToggleTodo(todo.id)} type="button">
-                  {todo.done ? "已完成" : "未完成"}
+                <button aria-label={todo.done ? "取消完成" : "标记完成"} onClick={() => onToggleTodo(todo.id)} type="button">
+                  {todo.done ? "取消完成" : "标记完成"}
                 </button>
-                <small className={`priority-pill priority-pill--${normalizeTodo(todo).priority.toLowerCase()}`}>{priorityLabel(normalizeTodo(todo).priority)}</small>
-                <span>{normalizeTodo(todo).owner}</span>
-                <button onClick={() => onRemoveTodo(todo.id)} type="button">删除</button>
+                <small className={`priority-pill priority-pill--${todo.priority.toLowerCase()}`}>{priorityLabel(todo.priority)}</small>
+                <span>{todo.owner}</span>
+                <div className="todo-row-actions">
+                  <button onClick={() => openEditTodo(todo)} type="button">编辑</button>
+                  <button className="danger-inline-button" onClick={() => requestDeleteTodo(todo)} type="button">删除</button>
+                </div>
               </article>
-            ))}
+            ))
+          )}
         </div>
       </section>
+
+      {isTodoFormOpen && (
+        <div className="todo-drawer-backdrop" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) requestCloseTodoForm();
+        }}>
+          <form aria-modal="true" className="todo-entry-form" onSubmit={submitTodo} role="dialog">
+            <div className="panel-title-row">
+              <div>
+                <span>{panelMode === "editTodo" ? "Edit Todo" : "New Todo"}</span>
+                <h3>{panelMode === "editTodo" ? "编辑待办事项" : "新建 Todo"}</h3>
+              </div>
+              <button aria-label="关闭 Todo 表单" className="icon-close-button" onClick={requestCloseTodoForm} title="关闭" type="button">×</button>
+            </div>
+            <label className="composer-field composer-field--wide">
+              待办事项
+              <input
+                aria-label="待办事项"
+                placeholder="例如：准备腾讯一面自我介绍"
+                value={todoDraft.title}
+                onChange={(event) => {
+                  const value = event.currentTarget.value;
+                  setTodoDraft((current) => ({ ...current, title: value }));
+                }}
+              />
+            </label>
+            <div className="composer-grid">
+              <label className="composer-field">
+                截止日期
+                <input
+                  aria-label="Todo 截止日期"
+                  type="date"
+                  value={todoDraft.due}
+                  onInput={(event) => {
+                    const value = event.currentTarget.value;
+                    setTodoDraft((current) => ({ ...current, due: value }));
+                  }}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setTodoDraft((current) => ({ ...current, due: value }));
+                  }}
+                />
+              </label>
+              <label className="composer-field">
+                Todo 类型
+                <select
+                  aria-label="Todo 类型"
+                  value={todoDraft.kind}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value as CalendarEventKind;
+                    setTodoDraft((current) => ({ ...current, kind: value }));
+                  }}
+                >
+                  <option value="todo">Todo</option>
+                  <option value="deadline">投递截止</option>
+                  <option value="interview">面试</option>
+                  <option value="written">笔试/测评</option>
+                  <option value="follow">跟进</option>
+                  <option value="offer">Offer</option>
+                </select>
+              </label>
+              <label className="composer-field">
+                优先级
+                <select
+                  aria-label="优先级"
+                  value={todoDraft.priority}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value as CalendarTodo["priority"];
+                    setTodoDraft((current) => ({ ...current, priority: value }));
+                  }}
+                >
+                  <option value="P0">P0-高优</option>
+                  <option value="P1">P1-重要</option>
+                  <option value="P2">P2-普通</option>
+                  <option value="P3">P3-低优</option>
+                </select>
+              </label>
+              <label className="composer-field">
+                执行人
+                <input
+                  aria-label="执行人"
+                  placeholder="执行人"
+                  value={todoDraft.owner}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setTodoDraft((current) => ({ ...current, owner: value }));
+                  }}
+                />
+              </label>
+            </div>
+            <div className="composer-actions">
+              <button onClick={requestCloseTodoForm} type="button">取消</button>
+              <button type="submit">保存</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {showDiscardConfirm && (
+        <ConfirmDialog
+          cancelLabel="继续编辑"
+          confirmLabel="放弃修改"
+          message="当前内容尚未保存，确定要放弃修改吗？"
+          onCancel={() => setShowDiscardConfirm(false)}
+          onConfirm={discardTodoChanges}
+          title="未保存的 Todo"
+        />
+      )}
+
+      {todoToDelete && (
+        <ConfirmDialog
+          cancelLabel="取消"
+          confirmLabel="确认删除"
+          danger
+          message="确定删除该任务吗？删除后无法恢复。"
+          onCancel={cancelDeleteTodo}
+          onConfirm={confirmDeleteTodo}
+          title="删除 Todo"
+        />
+      )}
     </section>
+  );
+}
+
+function ConfirmDialog({
+  cancelLabel,
+  confirmLabel,
+  danger = false,
+  message,
+  onCancel,
+  onConfirm,
+  title,
+}: {
+  cancelLabel: string;
+  confirmLabel: string;
+  danger?: boolean;
+  message: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+  title: string;
+}) {
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onCancel();
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onCancel]);
+
+  return (
+    <div
+      className="confirm-dialog-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onCancel();
+      }}
+    >
+      <section aria-modal="true" className="confirm-dialog" role="dialog">
+        <h3>{title}</h3>
+        <p>{message}</p>
+        <div className="confirm-actions">
+          <button onClick={onCancel} type="button">{cancelLabel}</button>
+          <button className={danger ? "danger-button" : ""} onClick={onConfirm} type="button">{confirmLabel}</button>
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -1448,6 +1785,19 @@ function calendarEventToDraft(event: CalendarEvent): CalendarEventDraft {
   };
 }
 
+function calendarDraftsEqual(a: CalendarEventDraft, b: CalendarEventDraft) {
+  return (
+    a.title === b.title &&
+    a.date === b.date &&
+    a.startTime === b.startTime &&
+    (a.endTime || "") === (b.endTime || "") &&
+    a.category === b.category &&
+    a.eventType === b.eventType &&
+    (a.location || "") === (b.location || "") &&
+    (a.description || "") === (b.description || "")
+  );
+}
+
 function validateEventDraft(draft: CalendarEventDraft) {
   if (!draft.title.trim()) return "请先填写日程标题。";
   if (!draft.category) return "请选择所属领域。";
@@ -1504,6 +1854,20 @@ function normalizeTodo(todo: CalendarTodo): CalendarTodo {
     priority: todo.priority || "P1",
     owner: todo.owner || "我",
   };
+}
+
+function blankTodoDraft(todayKey: string): Omit<CalendarTodo, "id" | "done"> {
+  return {
+    title: "",
+    due: todayKey,
+    kind: "todo",
+    priority: "P1",
+    owner: "我",
+  };
+}
+
+function todoDraftsEqual(a: Omit<CalendarTodo, "id" | "done">, b: Omit<CalendarTodo, "id" | "done">) {
+  return a.title === b.title && a.due === b.due && a.kind === b.kind && a.priority === b.priority && a.owner === b.owner;
 }
 
 function priorityLabel(priority: CalendarTodo["priority"]) {

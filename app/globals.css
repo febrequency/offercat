@@ -1945,6 +1945,173 @@ td {
   color: var(--muted);
 }
 
+.icon-close-button {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--muted);
+  font-size: 24px;
+  line-height: 1;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.icon-close-button:hover {
+  border-color: rgba(216, 95, 32, 0.42);
+  background: #fff4e8;
+  color: var(--accent-dark);
+  transform: translateY(-1px);
+}
+
+.confirm-dialog-backdrop,
+.todo-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(36, 27, 21, 0.24);
+  backdrop-filter: blur(7px);
+}
+
+.confirm-dialog {
+  display: grid;
+  gap: 12px;
+  width: min(420px, 100%);
+  padding: 22px;
+  border: 1px solid rgba(234, 215, 191, 0.88);
+  border-radius: 22px;
+  background: rgba(255, 250, 243, 0.98);
+  box-shadow: var(--shadow);
+}
+
+.confirm-dialog h3 {
+  margin: 0;
+  color: var(--ink-strong);
+  font-size: 22px;
+}
+
+.confirm-dialog p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 760;
+  line-height: 1.6;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.confirm-actions button {
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--accent-dark);
+  font-size: 13px;
+  font-weight: 900;
+  padding: 0 14px;
+}
+
+.confirm-actions button:last-child:not(.danger-button) {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.todo-drawer-backdrop {
+  place-items: center end;
+  z-index: 70;
+}
+
+.todo-drawer-backdrop .todo-entry-form {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  width: min(430px, 100%);
+  max-height: min(720px, calc(100vh - 48px));
+  overflow-y: auto;
+  padding: 20px;
+  border: 1px solid rgba(234, 215, 191, 0.88);
+  border-radius: 24px;
+  background: rgba(255, 250, 243, 0.98);
+  box-shadow: var(--shadow);
+}
+
+.todo-drawer-backdrop .todo-entry-form input,
+.todo-drawer-backdrop .todo-entry-form select {
+  height: 42px;
+  border-radius: 13px;
+  padding: 0 12px;
+}
+
+.todo-drawer-backdrop .composer-actions {
+  position: sticky;
+  bottom: -20px;
+  margin: 0 -20px -20px;
+  padding: 12px 20px 20px;
+}
+
+.todo-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.todo-row-actions button {
+  min-height: 30px;
+}
+
+.danger-inline-button {
+  border-color: rgba(199, 70, 45, 0.3) !important;
+  background: #fff0ed !important;
+  color: var(--danger) !important;
+}
+
+.todo-empty-state {
+  display: grid;
+  gap: 10px;
+  min-width: 1120px;
+  padding: 28px;
+  background: #fffaf3;
+}
+
+.todo-empty-state strong {
+  color: var(--ink-strong);
+  font-size: 18px;
+}
+
+.todo-empty-state p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 760;
+}
+
+.todo-empty-state button {
+  width: fit-content;
+  min-height: 40px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 900;
+  padding: 0 14px;
+}
+
+.todo-data-head,
+.todo-data-row {
+  grid-template-columns: minmax(260px, 1.45fr) 150px 150px 132px 130px 110px 152px;
+}
+
 @media (max-width: 1180px) {
   .site-header,
   .filters,
