@@ -35,7 +35,7 @@ import {
   Target,
   Trash2,
   UsersRound,
-  X,
+  Download,
   type LucideIcon,
 } from "lucide-react";
 
@@ -704,6 +704,39 @@ export default function OfferCatApp() {
     setJobs((current) => current.map((job) => (job.id === jobId ? { ...job, status } : job)));
   }
 
+  function keepJobs(jobIds: string[]) {
+    const selected = new Set(jobIds);
+    setJobs((current) => current.map((job) => (selected.has(job.id) ? { ...job, status: "收藏中" } : job)));
+  }
+
+  function editJob(jobId: string) {
+    const target = jobs.find((job) => job.id === jobId);
+    if (!target) return;
+
+    const nextTitle = window.prompt("编辑岗位名称", target.title);
+    if (nextTitle === null) return;
+
+    const trimmedTitle = nextTitle.trim();
+    if (!trimmedTitle) return;
+
+    setJobs((current) =>
+      current.map((job) =>
+        job.id === jobId
+          ? {
+              ...job,
+              title: trimmedTitle,
+              updatedAt: new Date().toISOString().slice(0, 10),
+            }
+          : job,
+      ),
+    );
+  }
+
+  function removeJobs(jobIds: string[]) {
+    const selected = new Set(jobIds);
+    setJobs((current) => current.filter((job) => !selected.has(job.id)));
+  }
+
   async function importOfficialSignals() {
     try {
       const response = await fetch("/data/synced-official-jobs.json", { cache: "no-store" });
@@ -988,7 +1021,13 @@ export default function OfferCatApp() {
                 清空筛选
               </button>
             </section>
-            <JobsTable jobs={filteredJobs} onStatusChange={updateJobStatus} />
+            <JobsTable
+              jobs={filteredJobs}
+              onEditJob={editJob}
+              onKeepJobs={keepJobs}
+              onRemoveJobs={removeJobs}
+              onStatusChange={updateJobStatus}
+            />
 
             <section className="source-area source-area--embedded">
               <div className="source-intro">
@@ -1077,8 +1116,6 @@ function DashboardSidebar({
   onNavigate: (view: AppView) => void;
   tip: string;
 }) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
-
   const nav = (
     <nav aria-label="主导航" className="sidebar-nav">
       {navItems.map((item) => {
@@ -1093,9 +1130,11 @@ function DashboardSidebar({
             type="button"
             variant="ghost"
           >
-            <span aria-hidden="true"><Icon /></span>
-            <strong>{item.label}</strong>
-            <small>{item.hint}</small>
+            <span aria-hidden="true" className="sidebar-nav-icon"><Icon /></span>
+            <span className="sidebar-nav-copy">
+              <strong>{item.label}</strong>
+              <small>{item.hint}</small>
+            </span>
           </Button>
         );
       })}
@@ -1121,7 +1160,7 @@ function DashboardSidebar({
         </SheetContent>
       </Sheet>
 
-      <aside className="dashboard-sidebar" data-collapsed={isCollapsed}>
+      <aside className="dashboard-sidebar">
       <Button className="sidebar-brand" onClick={() => onNavigate("求职大盘")} type="button" variant="ghost">
         <img src="/assets/offercat-mark.svg" alt="" />
         <span>
@@ -1131,17 +1170,6 @@ function DashboardSidebar({
       </Button>
 
       {nav}
-
-      <Button
-        aria-label={isCollapsed ? "展开导航栏" : "折叠导航栏"}
-        className="sidebar-collapse"
-        onClick={() => setIsCollapsed((current) => !current)}
-        size="icon-sm"
-        type="button"
-        variant="ghost"
-      >
-        {isCollapsed ? <Menu /> : <X />}
-      </Button>
 
       <article className="sidebar-campaign">
         <span>本周行动</span>
@@ -3453,21 +3481,72 @@ function Metric({ label, value }: { label: string; value: number }) {
 
 function JobsTable({
   jobs,
+  onEditJob,
+  onKeepJobs,
+  onRemoveJobs,
   onStatusChange,
 }: {
   jobs: Job[];
+  onEditJob: (jobId: string) => void;
+  onKeepJobs: (jobIds: string[]) => void;
+  onRemoveJobs: (jobIds: string[]) => void;
   onStatusChange: (jobId: string, status: JobStatus) => void;
 }) {
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [deleteJobIds, setDeleteJobIds] = useState<string[] | null>(null);
+  const visibleJobIds = useMemo(() => new Set(jobs.map((job) => job.id)), [jobs]);
+  const visibleSelectedIds = selectedIds.filter((id) => visibleJobIds.has(id));
+  const allSelected = jobs.length > 0 && visibleSelectedIds.length === jobs.length;
+  const selectedCount = visibleSelectedIds.length;
+
+  function toggleAllJobs(checked: boolean) {
+    setSelectedIds(checked ? jobs.map((job) => job.id) : []);
+  }
+
+  function toggleJob(jobId: string, checked: boolean) {
+    setSelectedIds((current) => (checked ? Array.from(new Set([...current, jobId])) : current.filter((id) => id !== jobId)));
+  }
+
+  function keepSelectedJobs() {
+    onKeepJobs(visibleSelectedIds);
+    setSelectedIds([]);
+  }
+
+  function confirmDeleteJobs() {
+    if (!deleteJobIds?.length) return;
+    onRemoveJobs(deleteJobIds);
+    setSelectedIds((current) => current.filter((id) => !deleteJobIds.includes(id)));
+    setDeleteJobIds(null);
+  }
+
   return (
     <section className="table-panel">
       <div className="table-meta">
         <span>共 {jobs.length} 个岗位</span>
         <span>默认按最近更新排序</span>
       </div>
+      {selectedCount > 0 && (
+        <div className="table-bulk-bar" role="region" aria-label="批量操作">
+          <strong>已选择 {selectedCount} 项</strong>
+          <div>
+            <button onClick={keepSelectedJobs} type="button">保留</button>
+            <button className="danger-button" onClick={() => setDeleteJobIds(visibleSelectedIds)} type="button">删除</button>
+            <button onClick={() => setSelectedIds([])} type="button">取消选择</button>
+          </div>
+        </div>
+      )}
       <div className="table-scroll">
         <table>
           <thead>
             <tr>
+              <th className="selection-column">
+                <input
+                  aria-label="全选岗位"
+                  checked={allSelected}
+                  onChange={(event) => toggleAllJobs(event.currentTarget.checked)}
+                  type="checkbox"
+                />
+              </th>
               <th>公司与岗位</th>
               <th>操作</th>
               <th>招聘截止时间</th>
@@ -3479,6 +3558,14 @@ function JobsTable({
           <tbody>
             {jobs.map((job) => (
               <tr key={job.id}>
+                <td className="selection-column">
+                  <input
+                    aria-label={`选择 ${job.company} ${job.title}`}
+                    checked={selectedIds.includes(job.id)}
+                    onChange={(event) => toggleJob(job.id, event.currentTarget.checked)}
+                    type="checkbox"
+                  />
+                </td>
                 <td>
                   <div className="company-cell">
                     <span>{job.company.slice(0, 1)}</span>
@@ -3493,6 +3580,8 @@ function JobsTable({
                     {job.applyUrl ? <a href={job.applyUrl} rel="noreferrer" target="_blank">查看官网链接</a> : <span>暂无链接</span>}
                     <button onClick={() => onStatusChange(job.id, "已投递")} type="button">加入投递流程</button>
                     <button onClick={() => onStatusChange(job.id, "收藏中")} type="button">加入兴趣库</button>
+                    <button onClick={() => onEditJob(job.id)} type="button">编辑</button>
+                    <button className="danger-link" onClick={() => setDeleteJobIds([job.id])} type="button">删除</button>
                   </div>
                 </td>
                 <td className={job.deadline.includes("截止") || job.deadline.includes("招满") ? "deadline" : ""}>{job.deadline}</td>
@@ -3512,6 +3601,17 @@ function JobsTable({
           </tbody>
         </table>
       </div>
+      {deleteJobIds && (
+        <ConfirmDialog
+          cancelLabel="取消"
+          confirmLabel="确认删除"
+          danger
+          message={`确定删除${deleteJobIds.length > 1 ? `选中的 ${deleteJobIds.length} 条` : "该条"}岗位记录吗？删除后无法恢复。`}
+          onCancel={() => setDeleteJobIds(null)}
+          onConfirm={confirmDeleteJobs}
+          title="删除岗位记录"
+        />
+      )}
     </section>
   );
 }
@@ -3854,9 +3954,17 @@ function ApplicationRecords({
   return (
     <section className="record-panel">
       <div className="record-heading">
-        <span>最近记录</span>
-        <h3>{filter === "全部" ? "最近求职记录" : `${filter}记录`}</h3>
-        {filter !== "全部" && <button onClick={onClearFilter} type="button">清除筛选</button>}
+        <div>
+          <span>最近记录</span>
+          <h3>{filter === "全部" ? "最近求职记录" : `${filter}记录`}</h3>
+        </div>
+        <div className="record-heading-actions">
+          <button onClick={() => downloadApplicationRecordsExcel(visibleRecords, filter)} type="button">
+            <Download aria-hidden="true" />
+            导出 Excel
+          </button>
+          {filter !== "全部" && <button onClick={onClearFilter} type="button">清除筛选</button>}
+        </div>
       </div>
       <div className="record-list">
         {visibleRecords.length === 0 ? (
@@ -3886,6 +3994,94 @@ function ApplicationRecords({
       </div>
     </section>
   );
+}
+
+const applicationExportColumns: Array<{ key: keyof ApplicationRecord; label: string }> = [
+  { key: "company", label: "公司" },
+  { key: "role", label: "岗位" },
+  { key: "direction", label: "岗位方向" },
+  { key: "companyType", label: "公司类型" },
+  { key: "industry", label: "行业" },
+  { key: "location", label: "工作地点" },
+  { key: "recruitType", label: "招聘类型" },
+  { key: "channel", label: "信息来源" },
+  { key: "applyDate", label: "投递日期" },
+  { key: "status", label: "当前状态" },
+  { key: "progress", label: "最新进展" },
+  { key: "nextAction", label: "下一步事项" },
+  { key: "nextDeadline", label: "下一步截止时间" },
+  { key: "needsFollowUp", label: "是否需要跟进" },
+  { key: "offerStatus", label: "Offer 状态" },
+  { key: "offerDeadline", label: "Offer 截止日期" },
+  { key: "salary", label: "薪资" },
+  { key: "baseCity", label: "Base 城市" },
+  { key: "priority", label: "优先级" },
+  { key: "interest", label: "意向程度" },
+  { key: "source", label: "来源备注" },
+  { key: "applyUrl", label: "网申链接" },
+  { key: "jd", label: "JD" },
+  { key: "resumeVersion", label: "简历版本" },
+  { key: "assessment", label: "是否测评" },
+  { key: "writtenTest", label: "笔试状态" },
+  { key: "interview", label: "面试状态" },
+  { key: "interviewRound", label: "面试轮次" },
+  { key: "interviewFormat", label: "面试形式" },
+  { key: "interviewResult", label: "面试结果" },
+  { key: "notes", label: "备注" },
+];
+
+function escapeExcelHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function formatExcelCell(value: string) {
+  const normalized = value.trim();
+  const safeValue = /^[=+\-@]/.test(normalized) ? `'${normalized}` : normalized;
+  return escapeExcelHtml(safeValue);
+}
+
+function downloadApplicationRecordsExcel(records: ApplicationRecord[], filter: string) {
+  const rows = records.map((record) =>
+    applicationExportColumns
+      .map((column) => `<td style="mso-number-format:'\\@';">${formatExcelCell(String(record[column.key] || ""))}</td>`)
+      .join(""),
+  );
+  const emptyRow = `<tr><td colspan="${applicationExportColumns.length}">暂无投递记录</td></tr>`;
+  const table = `
+    <html>
+      <head>
+        <meta charset="UTF-8" />
+        <style>
+          table { border-collapse: collapse; font-family: Arial, "Microsoft YaHei", sans-serif; }
+          th, td { border: 1px solid #d9e1f2; padding: 8px 10px; font-size: 12px; white-space: nowrap; }
+          th { background: #edf2ff; color: #172036; font-weight: 700; }
+        </style>
+      </head>
+      <body>
+        <table>
+          <thead>
+            <tr>${applicationExportColumns.map((column) => `<th>${escapeExcelHtml(column.label)}</th>`).join("")}</tr>
+          </thead>
+          <tbody>${rows.length ? rows.map((row) => `<tr>${row}</tr>`).join("") : emptyRow}</tbody>
+        </table>
+      </body>
+    </html>
+  `;
+  const blob = new Blob(["\ufeff", table], { type: "application/vnd.ms-excel;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  const scope = filter === "全部" ? "全部记录" : filter;
+
+  anchor.href = url;
+  anchor.download = `offercat-秋招投递记录-${scope}-${dashboardTodayKey}.xls`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 function applicationMatchesFilter(record: ApplicationRecord, filter: string) {
