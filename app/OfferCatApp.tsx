@@ -137,6 +137,7 @@ type ApplicationRecord = {
 };
 
 type CalendarEventKind = "deadline" | "interview" | "written" | "follow" | "offer" | "todo";
+type CalendarTodoKind = CalendarEventKind | "student_work" | "thesis" | "study" | "personal" | "meeting";
 type ScheduleCategoryValue = "student_work" | "job_search" | "thesis" | "study" | "personal";
 type CalendarEventType =
   | "deadline"
@@ -191,7 +192,7 @@ type CalendarTodo = {
   id: string;
   title: string;
   due: string;
-  kind: CalendarEventKind;
+  kind: CalendarTodoKind;
   done: boolean;
   priority: "P0" | "P1" | "P2" | "P3";
   owner: string;
@@ -480,6 +481,20 @@ const eventTypeOptions: Array<{ value: CalendarEventType; label: string }> = [
   { value: "thesis", label: "论文节点" },
   { value: "todo", label: "Todo" },
   { value: "other", label: "其他" },
+];
+
+const todoKindOptions: Array<{ value: CalendarTodoKind; label: string }> = [
+  { value: "todo", label: "通用 Todo" },
+  { value: "follow", label: "求职跟进" },
+  { value: "deadline", label: "投递截止" },
+  { value: "written", label: "笔试/测评" },
+  { value: "interview", label: "面试安排" },
+  { value: "offer", label: "Offer 决策" },
+  { value: "thesis", label: "论文事项" },
+  { value: "student_work", label: "学校/学工事务" },
+  { value: "study", label: "课程学习" },
+  { value: "meeting", label: "会议/沟通" },
+  { value: "personal", label: "个人事项" },
 ];
 
 const defaultCalendarTodos: CalendarTodo[] = [
@@ -2721,16 +2736,13 @@ function OfferTodoPage({
                   aria-label="Todo 类型"
                   value={todoDraft.kind}
                   onChange={(event) => {
-                    const value = event.currentTarget.value as CalendarEventKind;
+                    const value = event.currentTarget.value as CalendarTodoKind;
                     setTodoDraft((current) => ({ ...current, kind: value }));
                   }}
                 >
-                  <option value="todo">Todo</option>
-                  <option value="deadline">投递截止</option>
-                  <option value="interview">面试</option>
-                  <option value="written">笔试/测评</option>
-                  <option value="follow">跟进</option>
-                  <option value="offer">Offer</option>
+                  {todoKindOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
                 </select>
               </label>
               <label className="composer-field">
@@ -2763,8 +2775,8 @@ function OfferTodoPage({
               </label>
             </div>
             <div className="composer-actions">
-              <button onClick={requestCloseTodoForm} type="button">取消</button>
-              <button type="submit">保存</button>
+              <button className="todo-cancel-button" onClick={requestCloseTodoForm} type="button">取消</button>
+              <button className="todo-save-button" type="submit">保存 Todo</button>
             </div>
           </form>
         </div>
@@ -3138,12 +3150,16 @@ function buildSearchResults({
   return results.slice(0, 8);
 }
 
-function colorFromEventType(eventType: CalendarEventType | CalendarEventKind) {
+function colorFromEventType(eventType: CalendarEventType | CalendarTodoKind) {
   if (eventType === "deadline") return "red";
   if (eventType === "written") return "indigo";
   if (eventType === "interview") return "purple";
   if (eventType === "offer") return "green";
   if (eventType === "follow") return "cyan";
+  if (eventType === "thesis") return "indigo";
+  if (eventType === "student_work" || eventType === "meeting") return "green";
+  if (eventType === "study") return "purple";
+  if (eventType === "personal") return "slate";
   return "slate";
 }
 
@@ -3211,7 +3227,7 @@ function buildTodoEvents(todos: CalendarTodo[]): CalendarEvent[] {
       date: normalizedTodo.due,
       startTime: "09:00",
       category: categoryFromLegacyKind(normalizedTodo.kind),
-      eventType: normalizeEventType(normalizedTodo.kind),
+      eventType: todoKindToEventType(normalizedTodo.kind),
       source: "Todo",
       sourceType: "todo",
       sourceId: normalizedTodo.id,
@@ -3283,7 +3299,7 @@ function eventTypeLabel(eventType: CalendarEventType) {
   return eventTypeOptions.find((option) => option.value === eventType)?.label || "其他";
 }
 
-function normalizeCalendarEvent(event: Partial<CalendarEvent> & { kind?: CalendarEventKind; time?: string }): CalendarEvent {
+function normalizeCalendarEvent(event: Partial<CalendarEvent> & { kind?: CalendarTodoKind; time?: string }): CalendarEvent {
   const legacyKind = event.kind || "todo";
   const eventType = normalizeEventType(event.eventType || legacyKind);
   const category = normalizeCategory(event.category || categoryFromLegacyKind(legacyKind));
@@ -3341,9 +3357,21 @@ function sourceTypeLabel(sourceType?: CalendarSourceType) {
   return "手动创建";
 }
 
-function categoryFromLegacyKind(kind: CalendarEventKind): ScheduleCategoryValue {
+function categoryFromLegacyKind(kind: CalendarTodoKind): ScheduleCategoryValue {
+  if (kind === "student_work" || kind === "meeting") return "student_work";
+  if (kind === "thesis") return "thesis";
+  if (kind === "study") return "study";
   if (kind === "todo") return "personal";
+  if (kind === "personal") return "personal";
   return "job_search";
+}
+
+function todoKindToEventType(kind: CalendarTodoKind): CalendarEventType {
+  if (kind === "thesis") return "thesis";
+  if (kind === "study") return "course";
+  if (kind === "student_work" || kind === "meeting") return "meeting";
+  if (kind === "personal") return "todo";
+  return normalizeEventType(kind);
 }
 
 function calendarEventToDraft(event: CalendarEvent): CalendarEventDraft {
@@ -3424,7 +3452,7 @@ function readJsonStorage<T>(key: string, fallback: T, normalize?: (value: T) => 
 function normalizeTodo(todo: CalendarTodo): CalendarTodo {
   return {
     ...todo,
-    kind: todo.kind || "todo",
+    kind: todoKindOptions.some((option) => option.value === todo.kind) ? todo.kind : "todo",
     priority: todo.priority || "P1",
     owner: todo.owner || "我",
   };

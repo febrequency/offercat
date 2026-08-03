@@ -2135,6 +2135,27 @@ td {
   --event-bg: #f7f0e8;
 }
 
+.todo-data-row--student_work,
+.todo-data-row--meeting {
+  --event-color: #2f9562;
+  --event-bg: #ecf8f1;
+}
+
+.todo-data-row--thesis {
+  --event-color: #2f72d9;
+  --event-bg: #eef5ff;
+}
+
+.todo-data-row--study {
+  --event-color: #6f49d8;
+  --event-bg: #f4efff;
+}
+
+.todo-data-row--personal {
+  --event-color: #806f60;
+  --event-bg: #f7f0e8;
+}
+
 .legend-dot {
   color: var(--event-color);
 }
@@ -8303,4 +8324,44 @@ textarea:focus-visible {
 
 .dashboard-card.company-type-card .company-card-footer {
   margin-top: 14px;
+}
+
+/* Make the Todo form actions explicit and keep both buttons inside the modal. */
+.todo-drawer-backdrop .composer-actions {
+  position: static;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  margin: 6px 0 0;
+  padding: 0;
+}
+
+.todo-drawer-backdrop .composer-actions .todo-cancel-button,
+.todo-drawer-backdrop .composer-actions .todo-save-button {
+  display: inline-flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 900;
+  opacity: 1;
+}
+
+.todo-drawer-backdrop .composer-actions .todo-cancel-button {
+  border: 1px solid #dbe3f2;
+  background: #ffffff;
+  color: #60708d;
+}
+
+.todo-drawer-backdrop .composer-actions .todo-save-button {
+  border: 1px solid var(--flow-primary);
+  background: var(--flow-primary);
+  color: #ffffff;
+  box-shadow: 0 12px 28px rgba(82, 99, 245, 0.28);
+}
+
+.todo-drawer-backdrop .composer-actions .todo-save-button:hover {
+  background: #4253ec;
 }
