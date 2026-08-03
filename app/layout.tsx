@@ -22,8 +22,8 @@ export const metadata: Metadata = {
     type: "website",
   },
   icons: {
-    icon: "/assets/offercat-mark.svg",
-    shortcut: "/assets/offercat-mark.svg",
+    icon: "/assets/brand/offercat-logo.png",
+    shortcut: "/assets/brand/offercat-logo.png",
   },
 };
 

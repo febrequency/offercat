@@ -178,7 +178,7 @@ type CalendarEventDraft = Omit<
 type CalendarPanelMode = "dayList" | "createEvent" | "eventDetail" | "editEvent";
 type TodoPanelMode = "todoList" | "createTodo" | "editTodo";
 type AppView = "求职大盘" | "求职信息源" | "Offer 跟进" | "Offer 日历" | "Offer To Do";
-type TrendRange = "4w" | "8w" | "12w" | "6m" | "year";
+type TrendRange = "autumn" | "4w" | "8w" | "12w" | "6m" | "year";
 type IconComponent = LucideIcon;
 type CalendarFilterValue = "all" | ScheduleCategoryValue | CalendarEventType | "custom";
 type PendingCalendarAction =
@@ -425,7 +425,8 @@ const calendarEventStorageKey = "offercat-calendar-events-v1";
 const dismissedCalendarEventStorageKey = "offercat-dismissed-calendar-event-ids-v1";
 const dashboardTodayKey = "2026-07-27";
 const weekdayLabels = ["日", "一", "二", "三", "四", "五", "六"];
-const trendRanges: Array<{ value: TrendRange; label: string; weeks: number }> = [
+const trendRanges: Array<{ value: TrendRange; label: string; weeks?: number }> = [
+  { value: "autumn", label: "秋招周期" },
   { value: "4w", label: "近 4 周", weeks: 4 },
   { value: "8w", label: "近 8 周", weeks: 8 },
   { value: "12w", label: "近 12 周", weeks: 12 },
@@ -589,7 +590,7 @@ export default function OfferCatApp() {
   const [isSearchActive, setIsSearchActive] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const [trendRange, setTrendRange] = useState<TrendRange>("8w");
+  const [trendRange, setTrendRange] = useState<TrendRange>("autumn");
   const [isDashboardLoading, setIsDashboardLoading] = useState(true);
   const [city, setCity] = useState("全部");
   const [batch, setBatch] = useState("全部");
@@ -1100,12 +1101,6 @@ export default function OfferCatApp() {
         )}
 
         {activeView === "Offer To Do" && (
-          <>
-          <ViewHeading
-            count={`${calendarTodos.filter((todo) => !todo.done).length} 个待办`}
-            subtitle="把准备材料、复盘提醒和截止动作拆成可执行事项。"
-            title="Offer To Do"
-          />
           <OfferTodoPage
             todos={calendarTodos}
             onAddTodo={addCalendarTodo}
@@ -1113,7 +1108,6 @@ export default function OfferCatApp() {
             onToggleTodo={toggleCalendarTodo}
             onUpdateTodo={updateCalendarTodo}
           />
-          </>
         )}
       </section>
     </main>
@@ -1177,7 +1171,7 @@ function DashboardSidebar({
 
       <aside className="dashboard-sidebar">
       <Button className="sidebar-brand" onClick={() => onNavigate("求职大盘")} type="button" variant="ghost">
-        <img src="/assets/offercat-mark.svg" alt="" />
+        <img src="/assets/brand/offercat-logo.png" alt="" />
         <span>
           <strong>offercat</strong>
           秋招项目管理
@@ -1478,13 +1472,16 @@ function ApplicationTrendChart({
   const yTicks = [0, 10, 20, 30, 40, 50];
   const total = points.reduce((sum, point) => sum + point.value, 0);
   const average = Math.round(total / Math.max(points.length, 1));
+  const trendDescription = range === "autumn"
+    ? `秋招周期 ${total} 次投递，平均每阶段 ${average} 次。`
+    : `当前周期 ${total} 次投递，平均每周 ${average} 次。`;
 
   return (
     <Card className="dashboard-card trend-card">
       <CardHeader className="card-heading">
         <div>
           <CardTitle>近期投递趋势</CardTitle>
-          <CardDescription>当前周期 {total} 次投递，平均每周 {average} 次。</CardDescription>
+          <CardDescription>{trendDescription}</CardDescription>
         </div>
         <CardAction>
         <select aria-label="趋势时间范围" onChange={(event) => onRangeChange(event.currentTarget.value as TrendRange)} value={range}>
@@ -2002,16 +1999,6 @@ function CalendarPlanner({
 
   return (
     <section className="calendar-planner offer-calendar-page">
-      <div className="calendar-page-title">
-        <div className="tracking-title-icon">
-          <CalendarDays aria-hidden="true" />
-        </div>
-        <div>
-          <h2>Offer 日历</h2>
-          <p>把笔试、面试、截止日与个人安排放进同一个时间视图</p>
-        </div>
-      </div>
-
       <div className="calendar-summary-grid">
         <CalendarSummaryCard color="indigo" icon={NotebookPen} label="本月笔试" trend="+2" value={writtenCount} />
         <CalendarSummaryCard color="purple" icon={UsersRound} label="本月面试" trend="+1" value={interviewCount} />
@@ -2118,7 +2105,7 @@ function CalendarPlanner({
                     {dayEvents.slice(0, 3).map((event) => (
                       <span className={`calendar-event schedule-category--${event.category}`} key={event.id}>
                         <i>{event.startTime || "全天"}</i>
-                        {event.title}
+                        <b>{event.title}</b>
                       </span>
                     ))}
                     {dayEvents.length > 3 && <span className="calendar-more">+{dayEvents.length - 3}</span>}
@@ -3017,11 +3004,31 @@ function buildTrendPoints({
   trendRange: TrendRange;
 }) {
   const range = trendRanges.find((item) => item.value === trendRange) || trendRanges[1];
+  if (trendRange === "autumn") {
+    const autumnBuckets = [
+      { label: "8.1-8.31", start: "2026-08-01", end: "2026-08-31" },
+      { label: "9.1-9.30", start: "2026-09-01", end: "2026-09-30" },
+      { label: "10.1-10.31", start: "2026-10-01", end: "2026-10-31" },
+      { label: "11.1-11.30", start: "2026-11-01", end: "2026-11-30" },
+      { label: "12.1-12.30", start: "2026-12-01", end: "2026-12-30" },
+    ];
+
+    return autumnBuckets.map((bucket) => {
+      const bucketStart = new Date(`${bucket.start}T00:00:00`);
+      const bucketEnd = new Date(`${bucket.end}T23:59:59`);
+      const value = applications.filter((record) => dateInRange(record.applyDate, bucketStart, bucketEnd)).length
+        + jobs.filter((job) => (job.status === "已投递" || job.status === "面试中") && dateInRange(job.updatedAt, bucketStart, bucketEnd)).length;
+
+      return { label: bucket.label, value };
+    });
+  }
+
   const today = new Date(`${dashboardTodayKey}T00:00:00`);
   const start = new Date(today);
-  start.setDate(today.getDate() - range.weeks * 7 + 1);
+  const weeks = range.weeks || 8;
+  start.setDate(today.getDate() - weeks * 7 + 1);
 
-  return Array.from({ length: Math.min(range.weeks, 12) }, (_, index) => {
+  return Array.from({ length: Math.min(weeks, 12) }, (_, index) => {
     const bucketStart = new Date(start);
     bucketStart.setDate(start.getDate() + index * 7);
     const bucketEnd = new Date(bucketStart);
@@ -3833,6 +3840,24 @@ function ApplicationForm({
   onReset: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const [jdImportText, setJdImportText] = useState("");
+  const [jdImportMessage, setJdImportMessage] = useState("粘贴岗位页、招聘公告或 JD，可自动识别基础字段。");
+
+  function applyJdImport() {
+    const extracted = extractApplicationFields(jdImportText);
+    const entries = Object.entries(extracted) as Array<[keyof ApplicationRecord, string]>;
+
+    if (entries.length === 0) {
+      setJdImportMessage("暂时没有识别到可填字段，可以补充公司、岗位、地点、截止时间等信息后再试。");
+      return;
+    }
+
+    entries.forEach(([key, value]) => {
+      if (value.trim()) onChange(key, value.trim());
+    });
+    setJdImportMessage(`已识别并填充 ${entries.length} 个字段：${entries.map(([key]) => applicationFieldLabels[key]).join("、")}`);
+  }
+
   return (
     <form className="application-form" onSubmit={onSubmit}>
       <div className="form-heading">
@@ -3842,6 +3867,23 @@ function ApplicationForm({
         </div>
         {isEditing && <button onClick={onReset} type="button">退出编辑</button>}
       </div>
+
+      <section className="jd-import-panel" aria-label="岗位信息自动识别">
+        <div className="jd-import-heading">
+          <div>
+            <span>岗位信息识别</span>
+            <h4>粘贴岗位页面 / JD，先自动填一版</h4>
+          </div>
+          <button onClick={applyJdImport} type="button">识别并填充</button>
+        </div>
+        <textarea
+          aria-label="岗位页面或 JD 文本"
+          placeholder="例如：复制官网岗位详情页、招聘公告或 JD，包含公司、岗位、地点、截止时间、岗位职责等内容。"
+          value={jdImportText}
+          onChange={(event) => setJdImportText(event.currentTarget.value)}
+        />
+        <p>{jdImportMessage}</p>
+      </section>
 
       <div className="form-section">
         <h4>基础信息</h4>
@@ -3909,6 +3951,157 @@ function ApplicationForm({
       </div>
     </form>
   );
+}
+
+const applicationFieldLabels: Record<keyof ApplicationRecord, string> = {
+  id: "序号",
+  company: "公司",
+  role: "岗位名称",
+  direction: "岗位方向",
+  companyType: "公司类型",
+  industry: "行业",
+  location: "工作地点",
+  recruitType: "招聘类型",
+  channel: "投递渠道",
+  applyDate: "投递日期",
+  status: "当前状态",
+  progress: "最新进展",
+  nextAction: "下一步事项",
+  needsFollowUp: "是否需要跟进",
+  offerStatus: "Offer 状态",
+  offerDeadline: "Offer 截止日期",
+  salary: "薪资",
+  baseCity: "Base 城市",
+  priority: "优先级",
+  interest: "意向程度",
+  source: "信息来源",
+  applyUrl: "网申链接",
+  jd: "JD",
+  resumeVersion: "简历版本",
+  assessment: "测评状态",
+  writtenTest: "笔试状态",
+  interview: "面试状态",
+  interviewRound: "面试轮次",
+  interviewFormat: "面试形式",
+  interviewResult: "面试结果",
+  notes: "备注",
+  nextDeadline: "下一步截止时间",
+};
+
+function extractApplicationFields(rawText: string): Partial<ApplicationRecord> {
+  const text = rawText.replace(/\r/g, "\n").replace(/[ \t]+/g, " ").trim();
+  if (!text) return {};
+
+  const compactText = text.replace(/\n+/g, " ");
+  const extracted: Partial<ApplicationRecord> = { jd: text };
+  const url = compactText.match(/https?:\/\/[^\s"'<>，。；、)）]+/i)?.[0];
+  const company =
+    labeledValue(text, ["公司", "企业", "单位", "招聘单位", "雇主"])
+    || compactText.match(/(腾讯|阿里巴巴|阿里|字节跳动|抖音|京东|美团|百度|网易|华为|小米|快手|蚂蚁|拼多多|米哈游|蔚来|理想|小鹏|比亚迪|大疆|联想|携程|哔哩哔哩|B站|商汤|旷视|寒武纪|中兴|海康威视|宁德时代|微软|Apple|Google|Amazon|字节)[\w\u4e00-\u9fa5（）()·-]{0,12}/)?.[0];
+  const role =
+    labeledValue(text, ["岗位名称", "职位名称", "招聘岗位", "目标岗位", "岗位", "职位"])
+    || text
+      .split("\n")
+      .map((line) => line.trim())
+      .find((line) => /(工程师|产品|运营|算法|开发|测试|设计|管培|分析师|研究员|实习生|校招生)/.test(line) && line.length <= 42);
+  const location =
+    labeledValue(text, ["工作地点", "工作城市", "办公地点", "地点", "Base", "base"])
+    || Array.from(new Set(compactText.match(/北京|上海|深圳|广州|杭州|南京|成都|武汉|西安|苏州|长沙|重庆|天津|厦门|合肥|青岛|济南|宁波|珠海|佛山|东莞|无锡|海外/g) || [])).slice(0, 4).join("/");
+  const deadline = extractDeadline(compactText);
+
+  if (company) extracted.company = cleanupExtractedValue(company);
+  if (role) extracted.role = cleanupExtractedValue(role);
+  if (location) {
+    extracted.location = cleanupExtractedValue(location);
+    extracted.baseCity = cleanupExtractedValue(location).split(/[、,，/]/)[0] || "";
+  }
+  if (url) {
+    extracted.applyUrl = url;
+    extracted.channel = /career|campus|jobs|join|recruit|zhaopin|校招|招聘/i.test(url) ? "官网" : "其他";
+  }
+  if (deadline) {
+    extracted.nextDeadline = `${deadline}T23:59`;
+    extracted.nextAction = "关注投递截止";
+    extracted.needsFollowUp = "是";
+  }
+
+  extracted.industry = inferIndustry(compactText);
+  extracted.direction = inferDirection(compactText);
+  extracted.companyType = inferCompanyType(compactText);
+  extracted.recruitType = inferRecruitType(compactText);
+  extracted.status = /已投递|投递成功|提交成功/.test(compactText) ? "已投递" : "准备投递";
+  extracted.progress = extracted.status === "已投递" ? "已投递" : "待投递";
+  extracted.priority = /内推|提前批|截止|急招|核心|重点|高优/.test(compactText) ? "P0" : "P1";
+  extracted.interest = /心仪|高意向|重点|核心|匹配|推荐/.test(compactText) ? "高" : "中";
+  extracted.source = url ? "官网岗位页" : "JD 粘贴识别";
+
+  return Object.fromEntries(Object.entries(extracted).filter(([, value]) => String(value || "").trim())) as Partial<ApplicationRecord>;
+}
+
+function labeledValue(text: string, labels: string[]) {
+  const labelPattern = labels.map((label) => label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+  const match = text.match(new RegExp(`(?:${labelPattern})\\s*[:：]\\s*([^\\n；;|｜]{2,80})`, "i"));
+  return match?.[1];
+}
+
+function cleanupExtractedValue(value: string) {
+  return value
+    .replace(/^[：:\s]+/, "")
+    .replace(/\s*(岗位职责|职位描述|任职要求|工作职责|立即申请|申请链接).*$/i, "")
+    .trim();
+}
+
+function extractDeadline(text: string) {
+  const labeledDeadline = text.match(/(?:截止时间|投递截止|报名截止|申请截止|网申截止|截止日期)\s*[:：]?\s*(\d{4}[/-]\d{1,2}[/-]\d{1,2}|\d{1,2}月\d{1,2}日)/);
+  const dateText = labeledDeadline?.[1] || text.match(/20\d{2}[/-]\d{1,2}[/-]\d{1,2}/)?.[0];
+  if (!dateText) return "";
+  if (dateText.includes("月")) {
+    const parts = dateText.match(/(\d{1,2})月(\d{1,2})日/);
+    if (!parts) return "";
+    return `${dashboardTodayKey.slice(0, 4)}-${parts[1].padStart(2, "0")}-${parts[2].padStart(2, "0")}`;
+  }
+  const parts = dateText.split(/[/-]/);
+  return `${parts[0]}-${parts[1].padStart(2, "0")}-${parts[2].padStart(2, "0")}`;
+}
+
+function inferIndustry(text: string) {
+  if (/芯片|半导体|集成电路|IC|EDA/.test(text)) return "半导体/芯片";
+  if (/人工智能|大模型|机器学习|算法|数据科学|AI/.test(text)) return "人工智能";
+  if (/汽车|新能源|自动驾驶|电池/.test(text)) return "汽车/新能源";
+  if (/金融|银行|证券|基金|保险/.test(text)) return "金融科技";
+  if (/游戏|内容|直播|视频|社区/.test(text)) return "互联网内容";
+  if (/电商|零售|供应链|物流/.test(text)) return "电商/供应链";
+  if (/软件|云计算|SaaS|平台|系统/.test(text)) return "计算机软件";
+  return "互联网/综合";
+}
+
+function inferDirection(text: string) {
+  if (/前端|Web|React|Vue/.test(text)) return "前端开发";
+  if (/后端|服务端|Java|Go|Python|C\+\+/.test(text)) return "后端开发";
+  if (/算法|机器学习|深度学习|推荐|NLP|CV|大模型/.test(text)) return "AI/算法";
+  if (/数据分析|数据开发|BI|数仓/.test(text)) return "数据分析";
+  if (/产品经理|产品运营/.test(text)) return "产品/项目";
+  if (/运营|增长|用户/.test(text)) return "运营";
+  if (/测试|质量|QA/.test(text)) return "测试/质量";
+  if (/设计|UI|UX|交互/.test(text)) return "设计";
+  return "综合方向";
+}
+
+function inferCompanyType(text: string) {
+  if (/央企|国企|事业单位|研究院|研究所/.test(text)) return "央国企";
+  if (/外企|跨国|Microsoft|Google|Amazon|Apple|IBM|Oracle|SAP/.test(text)) return "外企";
+  if (/高校|大学|科研/.test(text)) return "高校/科研";
+  if (/民营/.test(text)) return "民营企业";
+  return "互联网";
+}
+
+function inferRecruitType(text: string) {
+  if (/日常实习/.test(text)) return "日常实习";
+  if (/暑期实习|暑期/.test(text)) return "暑期实习";
+  if (/提前批|实习提前批/.test(text)) return "实习提前批";
+  if (/补录/.test(text)) return "补录";
+  if (/2027|27届|秋招|校园招聘|校招/.test(text)) return "2027届秋招";
+  return "2027届秋招";
 }
 
 function Field({
@@ -3994,31 +4187,85 @@ function ApplicationRecords({
           {filter !== "全部" && <button onClick={onClearFilter} type="button">清除筛选</button>}
         </div>
       </div>
-      <div className="record-list">
+      <div className="record-table-shell">
         {visibleRecords.length === 0 ? (
           <div className="dashboard-empty-state">
             <strong>暂无匹配记录</strong>
             <p>当前筛选下没有投递记录，可以清除筛选或新增一条。</p>
           </div>
-        ) : visibleRecords.map((record) => (
-          <article className="record-card" key={record.id}>
-            <div>
-              <span>{record.priority} · {record.interest}意向</span>
-              <h4>{record.company} · {record.role}</h4>
-              <p>{record.location || "地点待确认"} / {record.recruitType} / {record.channel}</p>
-            </div>
-            <dl>
-              <div><dt>当前状态</dt><dd>{record.status}</dd></div>
-              <div><dt>下一步</dt><dd>{record.nextAction || "待补充"}</dd></div>
-              <div><dt>截止时间</dt><dd>{record.nextDeadline || record.offerDeadline || "待确认"}</dd></div>
-            </dl>
-            <div className="record-actions">
-              {record.applyUrl && <a href={record.applyUrl} rel="noreferrer" target="_blank">打开网申</a>}
-              <button aria-label={`编辑 ${record.company} 记录`} onClick={() => onEdit(record)} type="button"><Edit3 aria-hidden="true" />编辑</button>
-              <button aria-label={`删除 ${record.company} 记录`} onClick={() => onRemove(record.id)} type="button"><Trash2 aria-hidden="true" />删除</button>
-            </div>
-          </article>
-        ))}
+        ) : (
+          <table className="record-table">
+            <thead>
+              <tr>
+                <th scope="col">公司</th>
+                <th scope="col">岗位</th>
+                <th scope="col">行业 / 类别</th>
+                <th scope="col">状态</th>
+                <th scope="col">备注</th>
+                <th scope="col">最新进度日期</th>
+                <th scope="col">投递日期</th>
+                <th scope="col">base 地</th>
+                <th scope="col">优先级</th>
+                <th scope="col">投递链接</th>
+                <th scope="col">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleRecords.map((record) => (
+                <tr key={record.id}>
+                  <td>
+                    <div className="record-company-cell">
+                      <span className="record-company-mark" aria-hidden="true">{(record.company || "待").slice(0, 1)}</span>
+                      <div>
+                        <strong>{record.company || "公司待填写"}</strong>
+                        <small>{record.channel || "来源待确认"}</small>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <div className="record-role-cell">
+                      <strong>{record.role || "岗位待填写"}</strong>
+                      <small>{record.direction || "方向待确认"} · {record.recruitType || "批次待确认"}</small>
+                    </div>
+                  </td>
+                  <td>
+                    <div className="record-meta-stack">
+                      <span>{record.industry || "行业待确认"}</span>
+                      <small>{record.companyType || "类型待确认"}</small>
+                    </div>
+                  </td>
+                  <td>
+                    <span className={`status-pill status-pill--${statusTone(record.status)}`}>{record.status || "待确认"}</span>
+                  </td>
+                  <td>
+                    <p className="record-note-cell">
+                      {record.notes || record.progress || record.nextAction || (record.needsFollowUp === "是" ? "需要跟进" : "暂无备注")}
+                    </p>
+                  </td>
+                  <td>{record.nextDeadline || record.offerDeadline || "待确认"}</td>
+                  <td>{record.applyDate || "待确认"}</td>
+                  <td>{record.baseCity || record.location || "待确认"}</td>
+                  <td><span className="priority-chip">{record.priority || "P2"}</span></td>
+                  <td>
+                    {record.applyUrl ? (
+                      <a className="record-link" href={record.applyUrl} rel="noreferrer" target="_blank">
+                        打开网申
+                      </a>
+                    ) : (
+                      <span className="record-muted">待补充</span>
+                    )}
+                  </td>
+                  <td>
+                    <div className="record-table-actions">
+                      <button aria-label={`编辑 ${record.company} 记录`} onClick={() => onEdit(record)} type="button"><Edit3 aria-hidden="true" />编辑</button>
+                      <button aria-label={`删除 ${record.company} 记录`} onClick={() => onRemove(record.id)} type="button"><Trash2 aria-hidden="true" />删除</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </section>
   );
@@ -4119,6 +4366,15 @@ function applicationMatchesFilter(record: ApplicationRecord, filter: string) {
   if (filter === "面试中") return record.status === "面试中" || isActiveStage(record.interview);
   if (filter === "Offer") return record.status === "Offer" || record.offerStatus !== "暂无";
   return record.status === filter;
+}
+
+function statusTone(status: string) {
+  if (status === "Offer") return "offer";
+  if (status === "面试中") return "interview";
+  if (status === "笔试中" || status === "测评中") return "written";
+  if (status === "已结束") return "ended";
+  if (status === "已投递") return "applied";
+  return "draft";
 }
 
 function calendarEventMatchesFilter(event: CalendarEvent, filter: CalendarFilterValue) {
