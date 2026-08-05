@@ -1,8 +1,10 @@
 "use client";
 
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, type CSSProperties, type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as XLSX from "xlsx";
 import {
   AlarmClock,
+  ArrowLeft,
   Award,
   Bell,
   Bot,
@@ -20,12 +22,15 @@ import {
   Globe2,
   Grid2X2,
   GraduationCap,
+  GripVertical,
   Hourglass,
   Link2,
   MapPin,
   Menu,
   NotebookPen,
   Plus,
+  RefreshCw,
+  Save,
   Search,
   Send,
   ShieldCheck,
@@ -34,6 +39,7 @@ import {
   Tags,
   Target,
   Trash2,
+  Upload,
   UsersRound,
   Download,
   type LucideIcon,
@@ -73,7 +79,7 @@ import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 
-type JobStatus = "待投递" | "收藏中" | "已投递" | "面试中";
+type JobStatus = "待投递" | "收藏中" | "已投递" | "面试中" | "不合适";
 
 type Job = {
   id: string;
@@ -90,6 +96,23 @@ type Job = {
   tags: string[];
   updatedAt: string;
   description: string;
+  announcementUrl?: string;
+  examRequired?: string;
+  majorRequirement?: string;
+  recruitTarget?: string;
+  source?: string;
+  startDate?: string;
+};
+
+type JobImportPreview = {
+  duplicates: Job[];
+  errors: string[];
+  fileName: string;
+  fieldMatches: Array<{ label: string; matchedHeader: string; required?: boolean; sample: string }>;
+  importedAt: string;
+  rows: number;
+  skippedRows: number;
+  uniqueJobs: Job[];
 };
 
 type SourceLink = {
@@ -123,6 +146,7 @@ type ApplicationRecord = {
   priority: string;
   interest: string;
   source: string;
+  sourceJobId?: string;
   applyUrl: string;
   jd: string;
   resumeVersion: string;
@@ -177,7 +201,7 @@ type CalendarEventDraft = Omit<
 >;
 type CalendarPanelMode = "dayList" | "createEvent" | "eventDetail" | "editEvent";
 type TodoPanelMode = "todoList" | "createTodo" | "editTodo";
-type AppView = "求职大盘" | "求职信息源" | "Offer 跟进" | "Offer 日历" | "Offer To Do";
+type AppView = "求职大盘" | "求职信息源" | "Offer 跟进" | "Offer 日历" | "Offer To Do" | "笔面试准备";
 type TrendRange = "autumn" | "4w" | "8w" | "12w" | "6m" | "year";
 type IconComponent = LucideIcon;
 type CalendarFilterValue = "all" | ScheduleCategoryValue | CalendarEventType | "custom";
@@ -196,6 +220,56 @@ type CalendarTodo = {
   done: boolean;
   priority: "P0" | "P1" | "P2" | "P3";
   owner: string;
+};
+
+type PrepItemType = "written_test" | "interview" | "research" | "material" | "review" | "other";
+type PrepItemStatus = "not_started" | "in_progress" | "completed";
+
+type PreparationItem = {
+  id: string;
+  workspaceId: string;
+  title: string;
+  type: PrepItemType;
+  status: PrepItemStatus;
+  completed: boolean;
+  dueAt: string;
+  scheduledAt: string;
+  syncToTodo: boolean;
+  syncToCalendar: boolean;
+  linkedTodoId?: string;
+  linkedCalendarEventId?: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type WorkspaceTask = {
+  id: string;
+  workspaceId: string;
+  preparationItemId?: string;
+  title: string;
+  scheduledAt: string;
+  completed: boolean;
+  sortOrder: number;
+  syncToTodo: boolean;
+  syncToCalendar: boolean;
+  linkedTodoId?: string;
+  linkedCalendarEventId?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type InterviewWorkspace = {
+  id: string;
+  applicationId: string;
+  industry: string;
+  roleCategory: string;
+  noteContent: string;
+  items: PreparationItem[];
+  tasks: WorkspaceTask[];
+  pinned: boolean;
+  createdAt: string;
+  updatedAt: string;
 };
 
 type DashboardMetric = {
@@ -284,6 +358,7 @@ const blankApplication: ApplicationRecord = {
   priority: "P1",
   interest: "高",
   source: "",
+  sourceJobId: "",
   applyUrl: "",
   jd: "",
   resumeVersion: "",
@@ -418,11 +493,16 @@ const navItems: Array<{
   { id: "Offer 跟进", label: "Offer 跟进", hint: "投递记录", icon: ShieldCheck },
   { id: "Offer 日历", label: "Offer 日历", hint: "日程节点", icon: CalendarDays },
   { id: "Offer To Do", label: "Offer To Do", hint: "待办清单", icon: CheckSquare },
+  { id: "笔面试准备", label: "笔面试准备", hint: "岗位工作区", icon: BookOpen },
 ];
 const applicationStorageKey = "offercat-applications-v1";
+const jobsStorageKey = "offercat-jobs-v1";
+const offerCatDatabaseName = "offercat-local-data";
+const offerCatStoreName = "records";
 const calendarTodoStorageKey = "offercat-calendar-todos-v1";
 const calendarEventStorageKey = "offercat-calendar-events-v1";
 const dismissedCalendarEventStorageKey = "offercat-dismissed-calendar-event-ids-v1";
+const interviewWorkspaceStorageKey = "offercat-interview-workspaces-v1";
 const dashboardTodayKey = "2026-07-27";
 const weekdayLabels = ["日", "一", "二", "三", "四", "五", "六"];
 const trendRanges: Array<{ value: TrendRange; label: string; weeks?: number }> = [
@@ -596,6 +676,10 @@ export default function OfferCatApp() {
   const [batch, setBatch] = useState("全部");
   const [tag, setTag] = useState("全部");
   const [companyKind, setCompanyKind] = useState("全部");
+  const [industryFilter, setIndustryFilter] = useState("全部");
+  const [cohortFilter, setCohortFilter] = useState("2027暑期/秋招");
+  const [suitabilityFilter, setSuitabilityFilter] = useState("只看合适");
+  const [jobSort, setJobSort] = useState("latestUpdate");
   const [applicationFilter, setApplicationFilter] = useState("全部");
   const [form, setForm] = useState<ApplicationRecord>(blankApplication);
   const [editingApplicationId, setEditingApplicationId] = useState<string | null>(null);
@@ -604,20 +688,28 @@ export default function OfferCatApp() {
   const [calendarTodos, setCalendarTodos] = useState<CalendarTodo[]>(defaultCalendarTodos);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [dismissedCalendarEventIds, setDismissedCalendarEventIds] = useState<string[]>([]);
+  const [interviewWorkspaces, setInterviewWorkspaces] = useState<InterviewWorkspace[]>([]);
+  const [activeInterviewApplicationId, setActiveInterviewApplicationId] = useState<string | null>(null);
   const [isStorageReady, setIsStorageReady] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
-    window.queueMicrotask(() => {
+    void (async () => {
       if (cancelled) return;
 
       setApplications(readJsonStorage(applicationStorageKey, []));
       setCalendarTodos(readJsonStorage(calendarTodoStorageKey, defaultCalendarTodos, (items) => items.map(normalizeTodo)));
       setCalendarEvents(readJsonStorage<CalendarEvent[]>(calendarEventStorageKey, [], (items) => items.map(normalizeCalendarEvent)));
       setDismissedCalendarEventIds(readJsonStorage<string[]>(dismissedCalendarEventStorageKey, []));
+      setInterviewWorkspaces(readJsonStorage<InterviewWorkspace[]>(interviewWorkspaceStorageKey, [], (items) => items.map(normalizeInterviewWorkspace)));
+      const storedJobs = await readLargeJsonStorage<Job[]>(jobsStorageKey, initialJobs, (items) =>
+        items.map((job, index) => normalizeJob(job, index)),
+      );
+      if (cancelled) return;
+      setJobs(storedJobs);
       setIsStorageReady(true);
-    });
+    })();
 
     return () => {
       cancelled = true;
@@ -626,23 +718,33 @@ export default function OfferCatApp() {
 
   useEffect(() => {
     if (!isStorageReady) return;
-    window.localStorage.setItem(applicationStorageKey, JSON.stringify(applications));
+    void writeLargeJsonStorage(jobsStorageKey, jobs);
+  }, [isStorageReady, jobs]);
+
+  useEffect(() => {
+    if (!isStorageReady) return;
+    safeWriteJsonStorage(applicationStorageKey, applications);
   }, [applications, isStorageReady]);
 
   useEffect(() => {
     if (!isStorageReady) return;
-    window.localStorage.setItem(calendarTodoStorageKey, JSON.stringify(calendarTodos));
+    safeWriteJsonStorage(calendarTodoStorageKey, calendarTodos);
   }, [calendarTodos, isStorageReady]);
 
   useEffect(() => {
     if (!isStorageReady) return;
-    window.localStorage.setItem(calendarEventStorageKey, JSON.stringify(calendarEvents));
+    safeWriteJsonStorage(calendarEventStorageKey, calendarEvents);
   }, [calendarEvents, isStorageReady]);
 
   useEffect(() => {
     if (!isStorageReady) return;
-    window.localStorage.setItem(dismissedCalendarEventStorageKey, JSON.stringify(dismissedCalendarEventIds));
+    safeWriteJsonStorage(dismissedCalendarEventStorageKey, dismissedCalendarEventIds);
   }, [dismissedCalendarEventIds, isStorageReady]);
+
+  useEffect(() => {
+    if (!isStorageReady) return;
+    safeWriteJsonStorage(interviewWorkspaceStorageKey, interviewWorkspaces);
+  }, [interviewWorkspaces, isStorageReady]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setIsDashboardLoading(false), 220);
@@ -677,19 +779,34 @@ export default function OfferCatApp() {
     [applications, jobs],
   );
 
-  const filteredJobs = jobs.filter((job) => {
-    const haystack = [job.company, job.title, job.industry, job.city, job.description, job.tags.join(" ")]
-      .join(" ")
-      .toLowerCase();
+  const industryOptions = useMemo(
+    () => ["全部", ...Array.from(new Set(jobs.map((job) => job.industry).filter(Boolean)))],
+    [jobs],
+  );
 
-    return (
-      (!query || haystack.includes(query.toLowerCase())) &&
-      (city === "全部" || job.city.includes(city)) &&
-      (batch === "全部" || job.batch === batch) &&
-      (tag === "全部" || job.tags.includes(tag)) &&
-      (companyKind === "全部" || job.companyType === companyKind)
-    );
-  });
+  const filteredJobs = useMemo(() => {
+    const visibleJobs = jobs.filter((job) => {
+      const haystack = [job.company, job.title, job.industry, job.city, job.description, job.tags.join(" ")]
+        .join(" ")
+        .toLowerCase();
+      const suitabilityMatched =
+        suitabilityFilter === "全部含不合适" ||
+        (suitabilityFilter === "只看不合适" ? job.status === "不合适" : job.status !== "不合适");
+
+      return (
+        (!query || haystack.includes(query.toLowerCase())) &&
+        (city === "全部" || job.city.includes(city)) &&
+        (batch === "全部" || job.batch === batch) &&
+        (tag === "全部" || job.tags.includes(tag)) &&
+        (companyKind === "全部" || job.companyType === companyKind) &&
+        (industryFilter === "全部" || job.industry === industryFilter) &&
+        (cohortFilter === "全部届次" || isTarget2027AutumnRecruitment(job)) &&
+        suitabilityMatched
+      );
+    });
+
+    return sortJobs(visibleJobs, jobSort);
+  }, [batch, city, cohortFilter, companyKind, industryFilter, jobSort, jobs, query, suitabilityFilter, tag]);
 
   const visibleCalendarEvents = useMemo(
     () =>
@@ -725,6 +842,11 @@ export default function OfferCatApp() {
     setJobs((current) => current.map((job) => (selected.has(job.id) ? { ...job, status: "收藏中" } : job)));
   }
 
+  function markJobsUnsuitable(jobIds: string[]) {
+    const selected = new Set(jobIds);
+    setJobs((current) => current.map((job) => (selected.has(job.id) ? { ...job, status: "不合适" } : job)));
+  }
+
   function editJob(jobId: string) {
     const target = jobs.find((job) => job.id === jobId);
     if (!target) return;
@@ -753,37 +875,25 @@ export default function OfferCatApp() {
     setJobs((current) => current.filter((job) => !selected.has(job.id)));
   }
 
-  async function importOfficialSignals() {
-    try {
-      const response = await fetch("/data/synced-official-jobs.json", { cache: "no-store" });
-      const payload = await response.json();
-      const importedJobs: Job[] = (payload.jobs || []).map((job: Partial<Job>, index: number) => ({
-        id: `official-${job.company}-${index}`,
-        company: job.company || "未知公司",
-        title: job.title || "官网巡检",
-        industry: job.industry || "待分类",
-        city: job.city || "待确认",
-        deadline: job.deadline || "待确认",
-        applyUrl: job.applyUrl || "",
-        batch: "校招",
-        companyType: job.companyType || "待确认",
-        education: job.education || "2027届优先确认",
-        status: "待投递",
-        tags: job.tags || ["官网巡检", "2027届"],
-        updatedAt: (job.updatedAt || new Date().toISOString()).slice(0, 10),
-        description: job.description || "来自官网巡检结果。",
-      }));
+  function importJobsFromPreview(preview: JobImportPreview) {
+    if (preview.uniqueJobs.length === 0) return;
+    setJobs((current) => {
+      const existingKeys = new Set(current.map(getJobDuplicateKey));
+      const safeJobs = preview.uniqueJobs.filter((job) => !existingKeys.has(getJobDuplicateKey(job)));
+      return [...safeJobs, ...current];
+    });
+  }
 
-      setJobs((current) => {
-        const existingKeys = new Set(current.map((job) => `${job.company}|${job.title}|${job.applyUrl}`));
-        return [
-          ...importedJobs.filter((job) => !existingKeys.has(`${job.company}|${job.title}|${job.applyUrl}`)),
-          ...current,
-        ];
+  function dedupeExistingJobs() {
+    setJobs((current) => {
+      const seen = new Set<string>();
+      return current.filter((job) => {
+        const key = getJobDuplicateKey(job);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
       });
-    } catch {
-      setJobs((current) => current);
-    }
+    });
   }
 
   function updateForm<K extends keyof ApplicationRecord>(key: K, value: ApplicationRecord[K]) {
@@ -809,6 +919,9 @@ export default function OfferCatApp() {
         ? current.map((item) => (item.id === editingApplicationId ? nextRecord : item))
         : [nextRecord, ...current],
     );
+    if (nextRecord.sourceJobId) {
+      updateJobStatus(nextRecord.sourceJobId, "已投递");
+    }
     setForm(blankApplication);
     setEditingApplicationId(null);
     setFormMessage(editingApplicationId ? "已更新这条求职记录。" : "已加入我的秋招记录。");
@@ -824,6 +937,18 @@ export default function OfferCatApp() {
     setForm(record);
     setEditingApplicationId(record.id);
     setFormMessage("正在编辑已有记录。");
+  }
+
+  function startApplicationFromJob(jobId: string) {
+    const job = jobs.find((item) => item.id === jobId);
+    if (!job) return;
+
+    setForm(applicationDraftFromJob(job));
+    setEditingApplicationId(null);
+    setApplicationFilter("全部");
+    setFormMessage(`已从信息源带入 ${job.company} 的基础信息，补充投递日期、简历版本和流程信息后保存。`);
+    navigateToView("Offer 跟进");
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
   }
 
   function removeApplication(id: string) {
@@ -912,6 +1037,213 @@ export default function OfferCatApp() {
     );
   }
 
+  function openInterviewWorkspace(applicationId: string) {
+    const application = applications.find((record) => record.id === applicationId);
+    if (!application) return;
+
+    setInterviewWorkspaces((current) => {
+      if (current.some((workspace) => workspace.applicationId === applicationId)) return current;
+      return [createInterviewWorkspace(application, visibleCalendarEvents), ...current];
+    });
+    setActiveInterviewApplicationId(applicationId);
+  }
+
+  function createWorkspaceFromApplication(applicationId: string) {
+    openInterviewWorkspace(applicationId);
+  }
+
+  function returnToInterviewList() {
+    setActiveInterviewApplicationId(null);
+  }
+
+  function updateInterviewWorkspace(workspaceId: string, updater: (workspace: InterviewWorkspace) => InterviewWorkspace) {
+    setInterviewWorkspaces((current) =>
+      current.map((workspace) =>
+        workspace.id === workspaceId
+          ? normalizeInterviewWorkspace({ ...updater(workspace), updatedAt: new Date().toISOString() })
+          : workspace,
+      ),
+    );
+  }
+
+  function addPrepItem(
+    workspaceId: string,
+    title: string,
+    details: Partial<Pick<PreparationItem, "dueAt" | "scheduledAt" | "status">> = {},
+  ) {
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) return;
+
+    updateInterviewWorkspace(workspaceId, (workspace) => {
+      const timestamp = new Date().toISOString();
+      const nextOrder = Math.max(-1, ...workspace.items.map((item) => item.sortOrder)) + 1;
+      return {
+        ...workspace,
+        items: [
+          ...workspace.items,
+          {
+            id: window.crypto?.randomUUID?.() || `${Date.now()}`,
+            workspaceId,
+            title: trimmedTitle,
+            type: inferPrepItemType(trimmedTitle),
+            status: details.status || "not_started",
+            completed: details.status === "completed",
+            dueAt: details.dueAt || "",
+            scheduledAt: details.scheduledAt || "",
+            syncToTodo: false,
+            syncToCalendar: false,
+            sortOrder: nextOrder,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          },
+        ],
+      };
+    });
+  }
+
+  function updatePrepItem(workspaceId: string, itemId: string, patch: Partial<PreparationItem>) {
+    updateInterviewWorkspace(workspaceId, (workspace) => ({
+      ...workspace,
+      items: workspace.items.map((item) =>
+        item.id === itemId
+          ? normalizePreparationItem({ ...item, ...patch, updatedAt: new Date().toISOString() }, workspaceId, item.sortOrder)
+          : item,
+      ),
+    }));
+  }
+
+  function removePrepItem(workspaceId: string, itemId: string) {
+    const workspace = interviewWorkspaces.find((entry) => entry.id === workspaceId);
+    const item = workspace?.items.find((entry) => entry.id === itemId);
+    if (item?.linkedTodoId) {
+      removeCalendarTodo(item.linkedTodoId);
+    }
+    if (item?.linkedCalendarEventId) {
+      removeCalendarEvent(item.linkedCalendarEventId);
+    }
+
+    updateInterviewWorkspace(workspaceId, (workspace) => ({
+      ...workspace,
+      items: workspace.items.filter((item) => item.id !== itemId).map((item, index) => ({ ...item, sortOrder: index })),
+      tasks: workspace.tasks.filter((task) => task.preparationItemId !== itemId).map((task, index) => ({ ...task, sortOrder: index })),
+    }));
+  }
+
+  function reorderPrepItem(workspaceId: string, sourceId: string, targetId: string) {
+    updateInterviewWorkspace(workspaceId, (workspace) => ({
+      ...workspace,
+      items: reorderByIds(workspace.items, sourceId, targetId).map((item, index) => ({ ...item, sortOrder: index })),
+    }));
+  }
+
+  function addPrepItemToToday(workspaceId: string, itemId: string) {
+    updatePrepItem(workspaceId, itemId, {
+      dueAt: dashboardTodayKey,
+      scheduledAt: `${dashboardTodayKey}T18:00`,
+      status: "in_progress",
+    });
+  }
+
+  function syncPrepItemToTodo(workspaceId: string, itemId: string) {
+    const workspace = interviewWorkspaces.find((entry) => entry.id === workspaceId);
+    const item = workspace?.items.find((entry) => entry.id === itemId);
+    if (!workspace || !item) return;
+
+    if (item.syncToTodo && item.linkedTodoId) {
+      removeCalendarTodo(item.linkedTodoId);
+      updatePrepItem(workspaceId, itemId, { syncToTodo: false, linkedTodoId: undefined });
+      return;
+    }
+
+    const todoId = window.crypto?.randomUUID?.() || `${Date.now()}`;
+    const taskDate = item.scheduledAt.slice(0, 10) || item.dueAt || dashboardTodayKey;
+    setCalendarTodos((current) => [
+      {
+        id: todoId,
+        title: item.title,
+        due: taskDate,
+        kind: "todo",
+        done: item.completed,
+        priority: "P1",
+        owner: "我",
+      },
+      ...current,
+    ]);
+    updatePrepItem(workspaceId, itemId, { linkedTodoId: todoId, syncToTodo: true });
+  }
+
+  function syncPrepItemToCalendar(workspaceId: string, itemId: string) {
+    const workspace = interviewWorkspaces.find((entry) => entry.id === workspaceId);
+    const application = applications.find((record) => record.id === workspace?.applicationId);
+    const item = workspace?.items.find((entry) => entry.id === itemId);
+    if (!workspace || !item) return;
+
+    if (item.syncToCalendar && item.linkedCalendarEventId) {
+      removeCalendarEvent(item.linkedCalendarEventId);
+      updatePrepItem(workspaceId, itemId, { syncToCalendar: false, linkedCalendarEventId: undefined });
+      return;
+    }
+
+    const eventId = window.crypto?.randomUUID?.() || `${Date.now()}`;
+    const timestamp = new Date().toISOString();
+    const eventDate = item.scheduledAt.slice(0, 10) || item.dueAt || dashboardTodayKey;
+    const eventTime = item.scheduledAt.slice(11, 16) || "18:00";
+    setCalendarEvents((current) => [
+      {
+        id: eventId,
+        title: `${application?.company || "岗位"}准备：${item.title}`,
+        date: eventDate,
+        startTime: eventTime,
+        category: "job_search",
+        eventType: "todo",
+        source: "笔面试准备",
+        sourceType: "manual",
+        location: "个人准备",
+        description: application ? `${application.company} · ${application.role}` : "笔面试准备任务",
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+      ...current,
+    ]);
+    updatePrepItem(workspaceId, itemId, { linkedCalendarEventId: eventId, syncToCalendar: true });
+  }
+
+  function updateWorkspaceNote(workspaceId: string, noteContent: string) {
+    updateInterviewWorkspace(workspaceId, (workspace) => ({ ...workspace, noteContent }));
+  }
+
+  function toggleWorkspacePin(workspaceId: string) {
+    updateInterviewWorkspace(workspaceId, (workspace) => ({ ...workspace, pinned: !workspace.pinned }));
+  }
+
+  function regenerateWorkspace(workspaceId: string, mode: "append" | "replace") {
+    const workspace = interviewWorkspaces.find((item) => item.id === workspaceId);
+    const application = applications.find((record) => record.id === workspace?.applicationId);
+    if (!workspace || !application) return;
+
+    const generated = createInterviewWorkspace(application, visibleCalendarEvents);
+    updateInterviewWorkspace(workspaceId, (current) => {
+      if (mode === "replace") {
+        return { ...generated, id: current.id, applicationId: current.applicationId, pinned: current.pinned };
+      }
+
+      const existingTitles = new Set(current.items.map((item) => item.title));
+      const newItems = generated.items.filter((item) => !existingTitles.has(item.title));
+      return {
+        ...current,
+        items: [
+          ...current.items,
+          ...newItems.map((item, index) => ({
+            ...item,
+            id: window.crypto?.randomUUID?.() || `${Date.now()}-${index}`,
+            workspaceId: current.id,
+            sortOrder: current.items.length + index,
+          })),
+        ],
+      };
+    });
+  }
+
   function navigateToView(view: AppView) {
     setActiveView(view);
     setIsNotificationOpen(false);
@@ -934,6 +1266,10 @@ export default function OfferCatApp() {
     setBatch("全部");
     setTag("全部");
     setCompanyKind("全部");
+    setIndustryFilter("全部");
+    setCohortFilter("2027暑期/秋招");
+    setSuitabilityFilter("只看合适");
+    setJobSort("latestUpdate");
   }
 
   function handleSearchCommit(result = searchResults[0]) {
@@ -1033,15 +1369,53 @@ export default function OfferCatApp() {
                   ))}
                 </select>
               </label>
+              <label>
+                行业
+                <select onChange={(event) => setIndustryFilter(event.target.value)} value={industryFilter}>
+                  {industryOptions.map((option) => (
+                    <option key={option}>{option}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                届次范围
+                <select onChange={(event) => setCohortFilter(event.target.value)} value={cohortFilter}>
+                  <option>2027暑期/秋招</option>
+                  <option>全部届次</option>
+                </select>
+              </label>
+              <label>
+                合适度
+                <select onChange={(event) => setSuitabilityFilter(event.target.value)} value={suitabilityFilter}>
+                  <option>只看合适</option>
+                  <option>只看不合适</option>
+                  <option>全部含不合适</option>
+                </select>
+              </label>
+              <label>
+                排序
+                <select onChange={(event) => setJobSort(event.target.value)} value={jobSort}>
+                  <option value="latestUpdate">最新更新时间</option>
+                  <option value="companyTypeThenUpdate">企业类型分组 + 更新时间</option>
+                  <option value="deadlineAsc">截止时间从近到远</option>
+                </select>
+              </label>
               <button onClick={clearJobFilters} type="button">
                 清空筛选
               </button>
             </section>
+            <JobImportPanel
+              existingJobs={jobs}
+              onDedupeExisting={dedupeExistingJobs}
+              onImport={importJobsFromPreview}
+            />
             <JobsTable
               jobs={filteredJobs}
               onEditJob={editJob}
               onKeepJobs={keepJobs}
+              onMarkJobsUnsuitable={markJobsUnsuitable}
               onRemoveJobs={removeJobs}
+              onStartApplication={startApplicationFromJob}
               onStatusChange={updateJobStatus}
             />
 
@@ -1052,7 +1426,6 @@ export default function OfferCatApp() {
                 <p>
                   当前保留入口和清洗说明；后续导出规则稳定后，再接成自动同步。
                 </p>
-                <button onClick={importOfficialSignals} type="button">导入已有官网巡检结果</button>
               </div>
               <div className="source-grid">
                 {sourceLinks.map((source) => (
@@ -1107,6 +1480,30 @@ export default function OfferCatApp() {
             onRemoveTodo={removeCalendarTodo}
             onToggleTodo={toggleCalendarTodo}
             onUpdateTodo={updateCalendarTodo}
+          />
+        )}
+
+        {activeView === "笔面试准备" && (
+          <InterviewPrepPage
+            activeApplicationId={activeInterviewApplicationId}
+            applications={applications}
+            events={visibleCalendarEvents}
+            todayKey={dashboardTodayKey}
+            workspaces={interviewWorkspaces}
+            onAddItem={addPrepItem}
+            onAddItemToToday={addPrepItemToToday}
+            onCreateWorkspace={createWorkspaceFromApplication}
+            onOpenWorkspace={openInterviewWorkspace}
+            onRegenerateWorkspace={regenerateWorkspace}
+            onRemoveItem={removePrepItem}
+            onReorderItem={reorderPrepItem}
+            onReturnToList={returnToInterviewList}
+            onSyncItemToCalendar={syncPrepItemToCalendar}
+            onSyncItemToTodo={syncPrepItemToTodo}
+            onTogglePin={toggleWorkspacePin}
+            onUpdateItem={updatePrepItem}
+            onUpdateNote={updateWorkspaceNote}
+            onNavigate={navigateToView}
           />
         )}
       </section>
@@ -2499,6 +2896,600 @@ function ScheduleEventForm({
   );
 }
 
+function InterviewPrepPage({
+  activeApplicationId,
+  applications,
+  events,
+  onAddItem,
+  onAddItemToToday,
+  onCreateWorkspace,
+  onNavigate,
+  onOpenWorkspace,
+  onRegenerateWorkspace,
+  onRemoveItem,
+  onReorderItem,
+  onReturnToList,
+  onSyncItemToCalendar,
+  onSyncItemToTodo,
+  onTogglePin,
+  onUpdateItem,
+  onUpdateNote,
+  todayKey,
+  workspaces,
+}: {
+  activeApplicationId: string | null;
+  applications: ApplicationRecord[];
+  events: CalendarEvent[];
+  onAddItem: (workspaceId: string, title: string, details?: Partial<Pick<PreparationItem, "dueAt" | "scheduledAt" | "status">>) => void;
+  onAddItemToToday: (workspaceId: string, itemId: string) => void;
+  onCreateWorkspace: (applicationId: string) => void;
+  onNavigate: (view: AppView) => void;
+  onOpenWorkspace: (applicationId: string) => void;
+  onRegenerateWorkspace: (workspaceId: string, mode: "append" | "replace") => void;
+  onRemoveItem: (workspaceId: string, itemId: string) => void;
+  onReorderItem: (workspaceId: string, sourceId: string, targetId: string) => void;
+  onReturnToList: () => void;
+  onSyncItemToCalendar: (workspaceId: string, itemId: string) => void;
+  onSyncItemToTodo: (workspaceId: string, itemId: string) => void;
+  onTogglePin: (workspaceId: string) => void;
+  onUpdateItem: (workspaceId: string, itemId: string, patch: Partial<PreparationItem>) => void;
+  onUpdateNote: (workspaceId: string, noteContent: string) => void;
+  todayKey: string;
+  workspaces: InterviewWorkspace[];
+}) {
+  const activeApplication = applications.find((record) => record.id === activeApplicationId);
+  const activeWorkspace = activeApplication
+    ? workspaces.find((workspace) => workspace.applicationId === activeApplication.id) || createInterviewWorkspace(activeApplication, events)
+    : null;
+
+  if (activeApplication && activeWorkspace) {
+    return (
+      <InterviewWorkspaceDetail
+        application={activeApplication}
+        events={events}
+        key={activeWorkspace.id}
+        todayKey={todayKey}
+        workspace={activeWorkspace}
+        onAddItem={onAddItem}
+        onAddItemToToday={onAddItemToToday}
+        onRegenerateWorkspace={onRegenerateWorkspace}
+        onRemoveItem={onRemoveItem}
+        onReorderItem={onReorderItem}
+        onReturnToList={onReturnToList}
+        onSyncItemToCalendar={onSyncItemToCalendar}
+        onSyncItemToTodo={onSyncItemToTodo}
+        onUpdateItem={onUpdateItem}
+        onUpdateNote={onUpdateNote}
+      />
+    );
+  }
+
+  return (
+    <InterviewPrepList
+      applications={applications}
+      events={events}
+      todayKey={todayKey}
+      workspaces={workspaces}
+      onCreateWorkspace={onCreateWorkspace}
+      onNavigate={onNavigate}
+      onOpenWorkspace={onOpenWorkspace}
+      onTogglePin={onTogglePin}
+    />
+  );
+}
+
+function InterviewPrepList({
+  applications,
+  events,
+  onCreateWorkspace,
+  onNavigate,
+  onOpenWorkspace,
+  onTogglePin,
+  todayKey,
+  workspaces,
+}: {
+  applications: ApplicationRecord[];
+  events: CalendarEvent[];
+  onCreateWorkspace: (applicationId: string) => void;
+  onNavigate: (view: AppView) => void;
+  onOpenWorkspace: (applicationId: string) => void;
+  onTogglePin: (workspaceId: string) => void;
+  todayKey: string;
+  workspaces: InterviewWorkspace[];
+}) {
+  const [industryFilter, setIndustryFilter] = useState("全部");
+  const [roleFilter, setRoleFilter] = useState("全部");
+  const [prepQuery, setPrepQuery] = useState("");
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [selectedApplicationId, setSelectedApplicationId] = useState(applications[0]?.id || "");
+  const selectedApplicationValue = selectedApplicationId || applications[0]?.id || "";
+  const workspaceByApplication = new Map(workspaces.map((workspace) => [workspace.applicationId, workspace]));
+  const industryOptions = ["全部", "互联网", "央国企", "外企", "AI / 机器人", "品牌方", "其他"];
+  const roleOptions = useMemo(
+    () => ["全部", ...Array.from(new Set(applications.map((record) => inferRoleCategory(record)).filter(Boolean)))],
+    [applications],
+  );
+  const weekEnd = addDays(todayKey, 7);
+  const cards = applications
+    .map((application) => {
+      const workspace = workspaceByApplication.get(application.id) || createInterviewWorkspace(application, events);
+      const nextEvent = findNextPrepEvent(application, events, todayKey);
+      const progress = calculateWorkspaceProgress(workspace);
+      return { application, nextEvent, progress, workspace };
+    })
+    .filter(({ application, workspace }) => {
+      const haystack = [
+        application.company,
+        application.role,
+        application.industry,
+        application.companyType,
+        application.direction,
+        workspace.noteContent,
+        workspace.items.map((item) => item.title).join(" "),
+      ].join(" ").toLowerCase();
+      return (
+        (industryFilter === "全部" || normalizePrepIndustry(application) === industryFilter) &&
+        (roleFilter === "全部" || inferRoleCategory(application) === roleFilter) &&
+        (!prepQuery || haystack.includes(prepQuery.toLowerCase()))
+      );
+    })
+    .sort((a, b) => {
+      if (a.workspace.pinned !== b.workspace.pinned) return a.workspace.pinned ? -1 : 1;
+      const priorityDiff =
+        prepPriorityScore(b.application, b.workspace, b.nextEvent, todayKey) -
+        prepPriorityScore(a.application, a.workspace, a.nextEvent, todayKey);
+      if (priorityDiff !== 0) return priorityDiff;
+      return (a.nextEvent?.date || "9999-12-31").localeCompare(b.nextEvent?.date || "9999-12-31");
+    });
+  const weeklyPrepEvents = events.filter((event) => event.date >= todayKey && event.date <= weekEnd && isPrepEvent(event));
+  const urgentCount = cards.filter(({ application, nextEvent, workspace }) => prepPriorityScore(application, workspace, nextEvent, todayKey) >= 70).length;
+
+  return (
+    <section className="interview-prep-page">
+      <div className="prep-page-header">
+        <div>
+          <h2>笔面试准备</h2>
+          <p>先选择一个投递岗位，进入对应的笔试 / 面试准备工作区。</p>
+        </div>
+        <div className="prep-header-controls">
+          <label>行业<select value={industryFilter} onChange={(event) => setIndustryFilter(event.currentTarget.value)}>{industryOptions.map((option) => <option key={option}>{option}</option>)}</select></label>
+          <label>岗位类型<select value={roleFilter} onChange={(event) => setRoleFilter(event.currentTarget.value)}>{roleOptions.map((option) => <option key={option}>{option}</option>)}</select></label>
+          <label className="prep-search-field">搜索<span><Search aria-hidden="true" /><input placeholder="公司 / 岗位 / 准备内容" value={prepQuery} onChange={(event) => setPrepQuery(event.currentTarget.value)} /></span></label>
+          <button onClick={() => setIsCreateOpen(true)} type="button"><Plus aria-hidden="true" />新建工作区</button>
+        </div>
+      </div>
+
+      <div className="prep-summary-grid">
+        <PrepSummaryCard icon={CalendarDays} label="待准备岗位" value={`${cards.filter(({ progress }) => progress < 100).length}个`} note="需要制定准备计划" />
+        <PrepSummaryCard icon={NotebookPen} label="本周笔面试" value={`${weeklyPrepEvents.length}场`} note="未来七天内" />
+        <PrepSummaryCard icon={AlarmClock} label="需优先处理" value={`${urgentCount}个`} note="时间临近且准备度较低" />
+      </div>
+
+      {applications.length === 0 ? (
+        <section className="prep-empty-card">
+          <h3>还没有可准备的岗位</h3>
+          <p>请先在 Offer 跟进中添加投递记录，再为岗位创建笔面试准备工作区。</p>
+          <div>
+            <button onClick={() => onNavigate("Offer 跟进")} type="button">前往 Offer 跟进</button>
+            <button onClick={() => setIsCreateOpen(true)} type="button">选择已有岗位</button>
+          </div>
+        </section>
+      ) : (
+        <div className="prep-list-layout">
+          <div className="prep-card-grid">
+            {cards.length === 0 ? (
+              <div className="prep-empty-card prep-empty-card--inline"><h3>搜索无结果</h3><p>换一个公司、岗位或准备关键词试试。</p></div>
+            ) : (
+              cards.map(({ application, nextEvent, progress, workspace }) => (
+                <button className="prep-position-card" key={application.id} onClick={() => onOpenWorkspace(application.id)} type="button">
+                  <div className="prep-card-topline">
+                    <CompanyAvatar company={application.company} />
+                    <div>
+                      <h3>{application.company || "未命名公司"}｜{application.role || "岗位待填写"}</h3>
+                      <span className={`status-pill status-pill--${statusTone(application.status)}`}>{application.status || "准备中"}</span>
+                    </div>
+                    <span
+                      aria-label={workspace.pinned ? "取消置顶" : "置顶岗位"}
+                      className={workspace.pinned ? "prep-pin prep-pin--active" : "prep-pin"}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onTogglePin(workspace.id);
+                      }}
+                      role="button"
+                      tabIndex={0}
+                    >
+                      <Star aria-hidden="true" />
+                    </span>
+                  </div>
+                  <div className="prep-next-block">
+                    <span>下一场：{nextEvent ? eventTypeLabel(nextEvent.eventType) : application.nextAction || "待确认"}</span>
+                    <strong>{nextEvent ? `${formatDateLabel(nextEvent.date).replace("2026年", "")} ${nextEvent.startTime}` : "时间待定"}</strong>
+                  </div>
+                  <div className="prep-card-progress"><ProgressRing value={progress} /><span>准备进度</span></div>
+                  <div className="prep-tags">
+                    <span>{normalizePrepIndustry(application)}</span>
+                    <span>{inferRoleCategory(application)}</span>
+                    {buildPrepFocusTags(application).slice(0, 1).map((tag) => <span key={tag}>{tag}</span>)}
+                  </div>
+                  <strong className="prep-enter-link">进入工作区 <span aria-hidden="true">→</span></strong>
+                </button>
+              ))
+            )}
+          </div>
+
+          <aside className="prep-side-rail">
+            <section>
+              <div className="prep-side-title"><h3>最近提醒</h3><button type="button">查看全部</button></div>
+              {cards.slice(0, 3).map(({ application, nextEvent }) => (
+                <button key={application.id} onClick={() => onOpenWorkspace(application.id)} type="button">
+                  <CompanyAvatar company={application.company} />
+                  <span>
+                    <strong>{nextEvent ? `优先准备${application.company}${eventTypeLabel(nextEvent.eventType)}` : `补充${application.company}准备材料`}</strong>
+                    <small>{nextEvent ? `${formatDateLabel(nextEvent.date).replace("2026年", "")} ${nextEvent.startTime}` : application.nextAction || "下一步待确认"}</small>
+                  </span>
+                </button>
+              ))}
+            </section>
+            <section className="prep-advice-card">
+              <h3>准备建议</h3>
+              <ul>
+                <li>根据笔面试时间倒排准备计划。</li>
+                <li>优先处理近期场次。</li>
+                <li>针对薄弱知识点补充材料。</li>
+                <li>面试结束后及时记录复盘。</li>
+              </ul>
+            </section>
+          </aside>
+        </div>
+      )}
+
+      {isCreateOpen && (
+        <div className="confirm-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsCreateOpen(false); }}>
+          <section aria-modal="true" className="confirm-dialog prep-create-dialog" role="dialog">
+            <h3>选择已有岗位</h3>
+            {applications.length === 0 ? (
+              <p>当前还没有可选择的投递记录。</p>
+            ) : (
+              <label>
+                投递岗位
+                <select value={selectedApplicationValue} onChange={(event) => setSelectedApplicationId(event.currentTarget.value)}>
+                  {applications.map((record) => <option key={record.id} value={record.id}>{record.company}｜{record.role}</option>)}
+                </select>
+              </label>
+            )}
+            <div className="confirm-actions">
+              <button onClick={() => setIsCreateOpen(false)} type="button">取消</button>
+              <button onClick={() => { if (selectedApplicationValue) onCreateWorkspace(selectedApplicationValue); setIsCreateOpen(false); }} type="button">创建工作区</button>
+            </div>
+          </section>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function InterviewWorkspaceDetail({
+  application,
+  events,
+  onAddItem,
+  onAddItemToToday,
+  onRegenerateWorkspace,
+  onRemoveItem,
+  onReorderItem,
+  onReturnToList,
+  onSyncItemToCalendar,
+  onSyncItemToTodo,
+  onUpdateItem,
+  onUpdateNote,
+  todayKey,
+  workspace,
+}: {
+  application: ApplicationRecord;
+  events: CalendarEvent[];
+  onAddItem: (workspaceId: string, title: string, details?: Partial<Pick<PreparationItem, "dueAt" | "scheduledAt" | "status">>) => void;
+  onAddItemToToday: (workspaceId: string, itemId: string) => void;
+  onRegenerateWorkspace: (workspaceId: string, mode: "append" | "replace") => void;
+  onRemoveItem: (workspaceId: string, itemId: string) => void;
+  onReorderItem: (workspaceId: string, sourceId: string, targetId: string) => void;
+  onReturnToList: () => void;
+  onSyncItemToCalendar: (workspaceId: string, itemId: string) => void;
+  onSyncItemToTodo: (workspaceId: string, itemId: string) => void;
+  onUpdateItem: (workspaceId: string, itemId: string, patch: Partial<PreparationItem>) => void;
+  onUpdateNote: (workspaceId: string, noteContent: string) => void;
+  todayKey: string;
+  workspace: InterviewWorkspace;
+}) {
+  const [itemDraft, setItemDraft] = useState<{ dueAt: string; id?: string; scheduledAt: string; status: PrepItemStatus; title: string } | null>(null);
+  const [noteDraft, setNoteDraft] = useState(workspace.noteContent);
+  const [saveState, setSaveState] = useState<"saved" | "saving" | "failed">("saved");
+  const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
+  const noteEditorRef = useRef<HTMLTextAreaElement>(null);
+  const nextEvent = findNextPrepEvent(application, events, todayKey);
+  const progress = calculateWorkspaceProgress(workspace);
+  const sortedItems = workspace.items.slice().sort((a, b) => a.sortOrder - b.sortOrder);
+  const pendingItems = sortedItems.filter((item) => !item.completed);
+  const noteOutline = useMemo(() => extractNoteOutline(noteDraft), [noteDraft]);
+  const noteTools = [
+    { label: "正文", snippet: "正文内容" },
+    { label: "H1", snippet: "# 一级标题" },
+    { label: "H2", snippet: "## 二级标题" },
+    { label: "H3", snippet: "### 三级标题" },
+    { label: "列表", snippet: "- 要点一\n- 要点二\n- 要点三" },
+    { label: "待办", snippet: "- [ ] 待完成事项" },
+    { label: "高亮", snippet: "==重点内容==" },
+    { label: "链接", snippet: "[链接文字](https://)" },
+  ];
+
+  function insertNoteSnippet(snippet: string) {
+    const editor = noteEditorRef.current;
+    let cursorPosition = 0;
+
+    setNoteDraft((current) => {
+      if (!editor) {
+        const prefix = current.trim() ? "\n\n" : "";
+        const next = `${current.trimEnd()}${prefix}${snippet}`;
+        cursorPosition = next.length;
+        return next;
+      }
+
+      const start = editor.selectionStart ?? current.length;
+      const end = editor.selectionEnd ?? start;
+      const before = current.slice(0, start);
+      const after = current.slice(end);
+      const prefix = before && !before.endsWith("\n") ? "\n\n" : "";
+      const suffix = after && !after.startsWith("\n") ? "\n\n" : "";
+      const inserted = `${prefix}${snippet}${suffix}`;
+      cursorPosition = before.length + inserted.length;
+      return `${before}${inserted}${after}`;
+    });
+    setSaveState("saving");
+    window.requestAnimationFrame(() => {
+      noteEditorRef.current?.focus();
+      noteEditorRef.current?.setSelectionRange(cursorPosition, cursorPosition);
+    });
+  }
+
+  function openCreatePrepItem() {
+    setItemDraft({ dueAt: "", scheduledAt: "", status: "not_started", title: "" });
+  }
+
+  function openEditPrepItem(item: PreparationItem) {
+    setItemDraft({ dueAt: item.dueAt, id: item.id, scheduledAt: item.scheduledAt, status: item.status, title: item.title });
+  }
+
+  function focusNoteLine(lineNumber: number) {
+    const editor = noteEditorRef.current;
+    if (!editor) return;
+    const lines = noteDraft.split("\n");
+    const cursorPosition = lines.slice(0, Math.max(0, lineNumber - 1)).join("\n").length + (lineNumber > 1 ? 1 : 0);
+    editor.focus();
+    editor.setSelectionRange(cursorPosition, cursorPosition);
+  }
+
+  function submitPrepItem(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!itemDraft?.title.trim()) return;
+
+    if (itemDraft.id) {
+      onUpdateItem(workspace.id, itemDraft.id, {
+        completed: itemDraft.status === "completed",
+        dueAt: itemDraft.dueAt,
+        scheduledAt: itemDraft.scheduledAt,
+        status: itemDraft.status,
+        title: itemDraft.title.trim(),
+      });
+    } else {
+      onAddItem(workspace.id, itemDraft.title.trim(), {
+        dueAt: itemDraft.dueAt,
+        scheduledAt: itemDraft.scheduledAt,
+        status: itemDraft.status,
+      });
+    }
+
+    setItemDraft(null);
+  }
+
+  useEffect(() => {
+    if (noteDraft === workspace.noteContent) return;
+    const timer = window.setTimeout(() => {
+      try {
+        onUpdateNote(workspace.id, noteDraft);
+        setSaveState("saved");
+      } catch {
+        setSaveState("failed");
+      }
+    }, 520);
+    return () => window.clearTimeout(timer);
+  }, [noteDraft, onUpdateNote, workspace.id, workspace.noteContent]);
+
+  return (
+    <section className="interview-prep-page interview-prep-page--detail">
+      <div className="prep-detail-header">
+        <button onClick={onReturnToList} type="button"><ArrowLeft aria-hidden="true" />返回岗位列表</button>
+        <div><h2>{application.company || "未命名公司"}｜{application.role || "岗位待填写"}</h2><p>笔试 / 面试准备工作区</p></div>
+        <div className="prep-detail-actions">
+          <span>{normalizePrepIndustry(application)}</span>
+          <span>{inferRoleCategory(application)}</span>
+          <button onClick={() => onRegenerateWorkspace(workspace.id, "append")} type="button"><RefreshCw aria-hidden="true" />重新生成准备建议</button>
+        </div>
+      </div>
+
+      <div className="prep-summary-grid prep-summary-grid--detail">
+        <PrepSummaryCard icon={CalendarDays} label={nextEvent ? `距下一场${eventTypeLabel(nextEvent.eventType)}` : "暂无笔面试安排"} value={nextEvent ? distanceLabel(nextEvent.date, todayKey).replace("还有 ", "").replace("截止", "") : "待定"} note={nextEvent ? `${formatDateLabel(nextEvent.date).replace("2026年", "")} ${nextEvent.startTime}` : "在日历中新增节点后自动同步"} />
+        <PrepSummaryCard icon={Target} label="准备进度" value={`${progress}%`} note={`笔试 ${calculateTypeProgress(workspace, "written_test")}% · 面试 ${calculateTypeProgress(workspace, "interview")}%`} />
+        <PrepSummaryCard icon={FileText} label="待整理内容" value={`${pendingItems.length}个`} note={`面试 ${pendingItems.filter((item) => item.type === "interview").length} 个 · 笔试 ${pendingItems.filter((item) => item.type === "written_test").length} 个`} />
+      </div>
+
+      <div className="prep-workspace-grid">
+        <section className="prep-work-panel prep-checklist-panel">
+          <div className="prep-panel-heading">
+            <div><h3>本岗位准备清单</h3><p>列表只保留事项名，需要编辑时打开详情。</p></div>
+            <button className="prep-add-item-button" onClick={openCreatePrepItem} type="button"><Plus aria-hidden="true" />新增事项</button>
+          </div>
+          <div className="prep-item-list">
+            {sortedItems.map((item) => (
+              <article className="prep-item-row" draggable key={item.id} onDragOver={(event) => event.preventDefault()} onDragStart={() => setDraggedItemId(item.id)} onDrop={() => { if (draggedItemId && draggedItemId !== item.id) onReorderItem(workspace.id, draggedItemId, item.id); setDraggedItemId(null); }}>
+                <GripVertical aria-hidden="true" />
+                <input aria-label={`完成 ${item.title}`} checked={item.completed} type="checkbox" onChange={(event) => onUpdateItem(workspace.id, item.id, { completed: event.currentTarget.checked, status: event.currentTarget.checked ? "completed" : "in_progress" })} />
+                <button className="prep-item-title-button" onClick={() => openEditPrepItem(item)} type="button">
+                  <strong>{item.title}</strong>
+                  <small>
+                    {prepStatusLabel(item.status)}
+                    {item.scheduledAt ? ` · ${item.scheduledAt.slice(0, 10)} ${item.scheduledAt.slice(11, 16)}` : item.dueAt ? ` · ${formatDateLabel(item.dueAt).replace("2026年", "")}` : ""}
+                  </small>
+                </button>
+                <div className="prep-item-row-actions">
+                  <button onClick={() => onAddItemToToday(workspace.id, item.id)} type="button">设为今日</button>
+                  <button onClick={() => onSyncItemToTodo(workspace.id, item.id)} type="button">{item.syncToTodo ? "取消 Todo" : "同步 Todo"}</button>
+                  <button onClick={() => onSyncItemToCalendar(workspace.id, item.id)} type="button">{item.syncToCalendar ? "取消日历" : "同步日历"}</button>
+                  <button onClick={() => openEditPrepItem(item)} type="button">编辑</button>
+                  <button className="prep-danger-link" onClick={() => onRemoveItem(workspace.id, item.id)} type="button">删除</button>
+                </div>
+              </article>
+            ))}
+            {sortedItems.length === 0 && <p className="prep-side-empty">还没有准备事项，先新增一条要做的准备。</p>}
+          </div>
+        </section>
+
+        <section className="prep-work-panel prep-note-panel">
+          <div className="prep-panel-heading">
+            <div><h3>我的笔记</h3><p>每个岗位独立保存，输入后自动保存</p></div>
+            <span className={`prep-save-state prep-save-state--${saveState}`}><Save aria-hidden="true" />{saveState === "saving" ? "保存中" : saveState === "failed" ? "保存失败" : `已自动保存 ${formatClock(workspace.updatedAt)}`}</span>
+          </div>
+          <div className="prep-editor-toolbar">
+            {noteTools.map((item) => (
+              <button key={item.label} onClick={() => insertNoteSnippet(item.snippet)} type="button">{item.label}</button>
+            ))}
+          </div>
+          <div className="prep-note-body">
+            <textarea
+              aria-label="岗位准备笔记"
+              className="prep-note-editor"
+              ref={noteEditorRef}
+              value={noteDraft}
+              onChange={(event) => {
+                setNoteDraft(event.currentTarget.value);
+                setSaveState("saving");
+              }}
+            />
+            <aside aria-label="笔记目录预览" className="prep-note-outline">
+              <div className="prep-heading-sample">
+                <span>标题层级</span>
+                <strong>一级标题</strong>
+                <em>二级标题</em>
+              </div>
+              <h4>目录预览</h4>
+              {noteOutline.length === 0 ? (
+                <p className="prep-outline-empty">使用 H1 / H2 / H3 后会自动生成目录。</p>
+              ) : (
+                <nav className="prep-outline-list">
+                  {noteOutline.map((heading) => (
+                    <button
+                      className={`prep-outline-item prep-outline-item--${heading.level}`}
+                      key={heading.id}
+                      onClick={() => focusNoteLine(heading.line)}
+                      type="button"
+                    >
+                      {heading.title}
+                    </button>
+                  ))}
+                </nav>
+              )}
+            </aside>
+          </div>
+        </section>
+
+      </div>
+
+      {itemDraft && (
+        <div className="confirm-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setItemDraft(null); }}>
+          <form aria-modal="true" className="prep-item-dialog" onSubmit={submitPrepItem} role="dialog">
+            <div className="panel-title-row">
+              <div>
+                <span>{itemDraft.id ? "Edit preparation" : "New preparation"}</span>
+                <h3>{itemDraft.id ? "编辑准备事项" : "新增准备事项"}</h3>
+              </div>
+              <button aria-label="关闭准备事项表单" className="icon-close-button" onClick={() => setItemDraft(null)} title="关闭" type="button">×</button>
+            </div>
+            <label className="composer-field composer-field--wide">
+              事项名称
+              <input
+                autoFocus
+                placeholder="例如：整理 3 个 STAR 案例"
+                value={itemDraft.title}
+                onChange={(event) => setItemDraft((current) => current ? { ...current, title: event.currentTarget.value } : current)}
+              />
+            </label>
+            <div className="composer-grid">
+              <label className="composer-field">
+                状态
+                <select
+                  value={itemDraft.status}
+                  onChange={(event) => {
+                    const status = event.currentTarget.value as PrepItemStatus;
+                    setItemDraft((current) => current ? { ...current, status } : current);
+                  }}
+                >
+                  {prepStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </label>
+              <label className="composer-field">
+                截止日期
+                <input
+                  type="date"
+                  value={itemDraft.dueAt}
+                  onChange={(event) => setItemDraft((current) => current ? { ...current, dueAt: event.currentTarget.value } : current)}
+                />
+              </label>
+              <label className="composer-field">
+                执行时间
+                <input
+                  type="datetime-local"
+                  value={itemDraft.scheduledAt}
+                  onChange={(event) => setItemDraft((current) => current ? { ...current, scheduledAt: event.currentTarget.value } : current)}
+                />
+              </label>
+            </div>
+            <div className="composer-actions">
+              <button onClick={() => setItemDraft(null)} type="button">取消</button>
+              <button type="submit">{itemDraft.id ? "保存修改" : "保存事项"}</button>
+            </div>
+          </form>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function PrepSummaryCard({ icon: Icon, label, note, value }: { icon: IconComponent; label: string; note: string; value: string }) {
+  return (
+    <Card className="prep-summary-card">
+      <CardContent>
+        <span className="prep-summary-icon"><Icon aria-hidden="true" /></span>
+        <div><p>{label}</p><strong>{value}</strong><small>{note}</small></div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function CompanyAvatar({ company }: { company: string }) {
+  return (
+    <Avatar className="company-avatar">
+      <AvatarFallback>{(company || "职").slice(0, 1)}</AvatarFallback>
+    </Avatar>
+  );
+}
+
+function ProgressRing({ value }: { value: number }) {
+  const safeValue = Math.max(0, Math.min(100, value));
+  return (
+    <span className="prep-ring" style={{ "--progress": `${safeValue}%` } as CSSProperties}>
+      <strong>{safeValue}%</strong>
+      <small>准备进度</small>
+    </span>
+  );
+}
+
 function OfferTodoPage({
   todos,
   onAddTodo,
@@ -3456,6 +4447,88 @@ function readJsonStorage<T>(key: string, fallback: T, normalize?: (value: T) => 
   }
 }
 
+function safeWriteJsonStorage<T>(key: string, value: T) {
+  if (typeof window === "undefined") return false;
+
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function readLargeJsonStorage<T>(key: string, fallback: T, normalize?: (value: T) => T): Promise<T> {
+  const fromIndexedDb = await readIndexedDbValue<T>(key);
+  if (fromIndexedDb) return normalize ? normalize(fromIndexedDb) : fromIndexedDb;
+
+  const fromLocalStorage = readJsonStorage(key, fallback, normalize);
+  if (fromLocalStorage !== fallback) {
+    await writeLargeJsonStorage(key, fromLocalStorage);
+  }
+  return fromLocalStorage;
+}
+
+async function writeLargeJsonStorage<T>(key: string, value: T) {
+  const wroteToIndexedDb = await writeIndexedDbValue(key, value);
+  if (wroteToIndexedDb && typeof window !== "undefined") {
+    window.localStorage.removeItem(key);
+    return;
+  }
+
+  safeWriteJsonStorage(key, value);
+}
+
+function openOfferCatDatabase(): Promise<IDBDatabase | null> {
+  if (typeof window === "undefined" || !window.indexedDB) return Promise.resolve(null);
+
+  return new Promise((resolve) => {
+    const request = window.indexedDB.open(offerCatDatabaseName, 1);
+
+    request.onupgradeneeded = () => {
+      const database = request.result;
+      if (!database.objectStoreNames.contains(offerCatStoreName)) {
+        database.createObjectStore(offerCatStoreName, { keyPath: "key" });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => resolve(null);
+    request.onblocked = () => resolve(null);
+  });
+}
+
+async function readIndexedDbValue<T>(key: string): Promise<T | null> {
+  const database = await openOfferCatDatabase();
+  if (!database) return null;
+
+  return new Promise((resolve) => {
+    const transaction = database.transaction(offerCatStoreName, "readonly");
+    const store = transaction.objectStore(offerCatStoreName);
+    const request = store.get(key);
+
+    request.onsuccess = () => resolve((request.result?.value as T | undefined) || null);
+    request.onerror = () => resolve(null);
+    transaction.oncomplete = () => database.close();
+    transaction.onerror = () => database.close();
+  });
+}
+
+async function writeIndexedDbValue<T>(key: string, value: T): Promise<boolean> {
+  const database = await openOfferCatDatabase();
+  if (!database) return false;
+
+  return new Promise((resolve) => {
+    const transaction = database.transaction(offerCatStoreName, "readwrite");
+    const store = transaction.objectStore(offerCatStoreName);
+    const request = store.put({ key, value });
+
+    request.onsuccess = () => resolve(true);
+    request.onerror = () => resolve(false);
+    transaction.oncomplete = () => database.close();
+    transaction.onerror = () => database.close();
+  });
+}
+
 function normalizeTodo(todo: CalendarTodo): CalendarTodo {
   return {
     ...todo,
@@ -3497,6 +4570,733 @@ function priorityRank(priority: CalendarTodo["priority"]) {
   }[priority];
 }
 
+const prepStatusOptions: Array<{ value: PrepItemStatus; label: string }> = [
+  { value: "not_started", label: "待开始" },
+  { value: "in_progress", label: "进行中" },
+  { value: "completed", label: "已完成" },
+];
+
+function prepStatusLabel(status: PrepItemStatus) {
+  return prepStatusOptions.find((option) => option.value === status)?.label || "待开始";
+}
+
+function extractNoteOutline(note: string) {
+  return note
+    .split("\n")
+    .map((line, index) => {
+      const match = /^(#{1,3})\s+(.+)$/.exec(line.trim());
+      if (!match) return null;
+      return {
+        id: `note-heading-${index}-${match[2].slice(0, 18)}`,
+        level: match[1].length,
+        line: index + 1,
+        title: match[2].replace(/[#*_`[\]]/g, "").trim(),
+      };
+    })
+    .filter((item): item is { id: string; level: number; line: number; title: string } => Boolean(item?.title));
+}
+
+function normalizeInterviewWorkspace(workspace: Partial<InterviewWorkspace>): InterviewWorkspace {
+  const timestamp = workspace.updatedAt || workspace.createdAt || new Date().toISOString();
+  const workspaceId = workspace.id || `prep-${workspace.applicationId || Date.now()}`;
+  return {
+    id: workspaceId,
+    applicationId: workspace.applicationId || "",
+    industry: workspace.industry || "互联网",
+    roleCategory: workspace.roleCategory || "其他",
+    noteContent: workspace.noteContent || "",
+    items: (workspace.items || []).map((item, index) => normalizePreparationItem(item, workspaceId, index)),
+    tasks: (workspace.tasks || []).map((task, index) => normalizeWorkspaceTask(task, workspaceId, index)),
+    pinned: Boolean(workspace.pinned),
+    createdAt: workspace.createdAt || timestamp,
+    updatedAt: timestamp,
+  };
+}
+
+function normalizePreparationItem(item: Partial<PreparationItem>, workspaceId: string, index: number): PreparationItem {
+  const timestamp = item.updatedAt || item.createdAt || new Date().toISOString();
+  const status = item.status || (item.completed ? "completed" : "not_started");
+  return {
+    id: item.id || `${workspaceId}-item-${index}`,
+    workspaceId,
+    title: item.title || "未命名准备事项",
+    type: normalizePrepItemType(item.type || inferPrepItemType(item.title || "")),
+    status,
+    completed: status === "completed" || Boolean(item.completed),
+    dueAt: item.dueAt || "",
+    scheduledAt: item.scheduledAt || "",
+    syncToTodo: Boolean(item.syncToTodo),
+    syncToCalendar: Boolean(item.syncToCalendar),
+    linkedTodoId: item.linkedTodoId,
+    linkedCalendarEventId: item.linkedCalendarEventId,
+    sortOrder: Number.isFinite(item.sortOrder) ? Number(item.sortOrder) : index,
+    createdAt: item.createdAt || timestamp,
+    updatedAt: timestamp,
+  };
+}
+
+function normalizeWorkspaceTask(task: Partial<WorkspaceTask>, workspaceId: string, index: number): WorkspaceTask {
+  const timestamp = task.updatedAt || task.createdAt || new Date().toISOString();
+  return {
+    id: task.id || `${workspaceId}-task-${index}`,
+    workspaceId,
+    preparationItemId: task.preparationItemId,
+    title: task.title || "未命名任务",
+    scheduledAt: task.scheduledAt || `${dashboardTodayKey}T18:00`,
+    completed: Boolean(task.completed),
+    sortOrder: Number.isFinite(task.sortOrder) ? Number(task.sortOrder) : index,
+    syncToTodo: Boolean(task.syncToTodo),
+    syncToCalendar: Boolean(task.syncToCalendar),
+    linkedTodoId: task.linkedTodoId,
+    linkedCalendarEventId: task.linkedCalendarEventId,
+    createdAt: task.createdAt || timestamp,
+    updatedAt: timestamp,
+  };
+}
+
+function createInterviewWorkspace(application: ApplicationRecord, events: CalendarEvent[]): InterviewWorkspace {
+  const timestamp = new Date().toISOString();
+  const workspaceId = `prep-${application.id || application.company || Date.now()}`;
+  const nextEvent = findNextPrepEvent(application, events, dashboardTodayKey);
+  const templates = buildPrepTemplates(application);
+  const items = templates.items.map((item, index) => ({
+    id: `${workspaceId}-item-${index}`,
+    workspaceId,
+    title: item.title,
+    type: item.type,
+    status: index < 2 ? "in_progress" as const : "not_started" as const,
+    completed: false,
+    dueAt: nextEvent?.date || "",
+    scheduledAt: nextEvent ? `${nextEvent.date}T${nextEvent.startTime || "18:00"}` : "",
+    syncToTodo: false,
+    syncToCalendar: false,
+    sortOrder: index,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  }));
+  const tasks = templates.tasks.map((task, index) => ({
+    id: `${workspaceId}-task-${index}`,
+    workspaceId,
+    preparationItemId: items[index]?.id,
+    title: task,
+    scheduledAt: `${dashboardTodayKey}T${["09:30", "11:00", "15:00", "18:00"][index] || "18:00"}`,
+    completed: false,
+    sortOrder: index,
+    syncToTodo: false,
+    syncToCalendar: false,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  }));
+
+  return {
+    id: workspaceId,
+    applicationId: application.id,
+    industry: normalizePrepIndustry(application),
+    roleCategory: inferRoleCategory(application),
+    noteContent: templates.note,
+    items,
+    tasks,
+    pinned: application.priority === "P0",
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+}
+
+function buildPrepTemplates(application: ApplicationRecord): {
+  items: Array<{ title: string; type: PrepItemType }>;
+  note: string;
+  tasks: string[];
+} {
+  const industry = normalizePrepIndustry(application);
+  const roleCategory = inferRoleCategory(application);
+  const isStateOwned = industry === "央国企";
+  const isAiProduct = /AI|人工智能|大模型|算法|机器人/.test([application.industry, application.direction, application.role, application.jd].join(" "));
+  const baseItems: Array<{ title: string; type: PrepItemType }> = [
+    { title: "拆解 JD 关键词", type: "research" },
+    { title: "准备 1 分钟自我介绍", type: "interview" },
+    { title: "整理 3 个 STAR 案例", type: "material" },
+    { title: "准备反问问题", type: "interview" },
+    { title: "过往项目复盘", type: "review" },
+  ];
+  const extraItems = isStateOwned
+    ? [
+        { title: "刷 20 道行测题", type: "written_test" as const },
+        { title: "整理结构化面试素材", type: "interview" as const },
+        { title: "补充近期政策与单位动态", type: "research" as const },
+      ]
+    : isAiProduct
+      ? [
+          { title: "梳理 AI 产品理解与模型边界", type: "research" as const },
+          { title: "准备 AI 产品设计题", type: "interview" as const },
+          { title: "整理竞品与商业化案例", type: "material" as const },
+        ]
+      : [
+          { title: `${roleCategory}专项练习`, type: roleCategory === "技术" ? "written_test" as const : "interview" as const },
+          { title: "行业分析与竞品梳理", type: "research" as const },
+          { title: "补充业务和产品矩阵", type: "material" as const },
+        ];
+  const focus = buildPrepFocusTags(application).join("、");
+  const note = isStateOwned
+    ? `单位概况\n- 单位性质：${application.companyType || "待补充"}\n- 核心业务：${application.industry || "待补充"}\n- 发展战略：待补充\n\n岗位理解\n- 统筹协调\n- 文字综合\n- 沟通执行\n- 服务业务\n\n答题提醒\n- 政治素养\n- 责任担当\n- 逻辑清晰\n- 结合岗位实际\n\n我的案例素材\n- 项目背景：\n- 我的任务：\n- 关键行动：\n- 最终结果：`
+    : `公司信息\n- 公司业务：${application.industry || "待补充"}\n- 产品矩阵：待补充\n- 近期动态：待补充\n- 竞争对手：待补充\n\n岗位理解\n- 岗位职责：${application.direction || application.role || "待补充"}\n- 核心能力：${focus || "待补充"}\n- JD 关键词：\n- 与个人经历的匹配点：\n\n答题提醒\n- 结论先行\n- 分点展开\n- 用数据说明结果\n- 从用户与业务视角回答\n\n我的案例素材\n- 项目背景：\n- 我的任务：\n- 关键行动：\n- 最终结果：`;
+
+  return {
+    items: [...baseItems, ...extraItems],
+    note,
+    tasks: ["复习岗位常见题", "整理 STAR 案例素材", "准备面试反问问题", "复盘 JD 与项目匹配点"],
+  };
+}
+
+function normalizePrepIndustry(application: ApplicationRecord) {
+  const text = [application.companyType, application.industry, application.company, application.role, application.jd].join(" ");
+  if (/央企|国企|事业单位|国家电网|银行|政策|公基|行测/.test(text)) return "央国企";
+  if (/外企|跨国|Microsoft|Google|Amazon|Apple|IBM|Oracle|SAP/.test(text)) return "外企";
+  if (/AI|人工智能|大模型|算法|机器人|自动驾驶|智能/.test(text)) return "AI / 机器人";
+  if (/品牌|消费|内容|小红书|运营|市场/.test(text)) return "品牌方";
+  if (/互联网|软件|云|平台|电商|游戏|产品/.test(text)) return "互联网";
+  return "其他";
+}
+
+function inferRoleCategory(application: ApplicationRecord) {
+  const text = [application.role, application.direction, application.jd].join(" ");
+  if (/产品|PM|Product/i.test(text)) return "产品";
+  if (/运营|增长|用户|内容/.test(text)) return "运营";
+  if (/综合|管培|管理|职能|人力|行政|财务/.test(text)) return "综合管理";
+  if (/市场|品牌|营销|商务/.test(text)) return "市场";
+  if (/工程师|开发|算法|测试|前端|后端|Java|Python|C\+\+|Go/.test(text)) return "技术";
+  if (/设计|UI|UX|交互/.test(text)) return "设计";
+  return "其他";
+}
+
+function buildPrepFocusTags(application: ApplicationRecord) {
+  const industry = normalizePrepIndustry(application);
+  const roleCategory = inferRoleCategory(application);
+  if (industry === "央国企") return ["行测", "申论", "公基", "时政", "结构化面试"];
+  if (/AI|人工智能|大模型|算法/.test([application.industry, application.direction, application.role, application.jd].join(" "))) {
+    return ["AI 产品理解", "模型能力边界", "用户场景", "竞品分析", "商业化"];
+  }
+  if (roleCategory === "产品") return ["产品设计", "业务分析", "用户洞察", "数据分析", "竞品研究"];
+  if (roleCategory === "技术") return ["基础算法", "项目复盘", "系统设计", "代码能力", "技术表达"];
+  if (roleCategory === "运营") return ["用户增长", "内容策略", "活动复盘", "数据分析", "业务理解"];
+  return ["自我介绍", "STAR 案例", "岗位理解", "反问问题", "复盘记录"];
+}
+
+function normalizePrepItemType(type: string): PrepItemType {
+  if (type === "written_test" || type === "interview" || type === "research" || type === "material" || type === "review" || type === "other") {
+    return type;
+  }
+  return "other";
+}
+
+function inferPrepItemType(title: string): PrepItemType {
+  if (/行测|笔试|测评|算法|刷题/.test(title)) return "written_test";
+  if (/面试|自我介绍|反问|结构化/.test(title)) return "interview";
+  if (/公司|行业|竞品|JD|业务|动态/.test(title)) return "research";
+  if (/素材|案例|STAR|简历/.test(title)) return "material";
+  if (/复盘|总结/.test(title)) return "review";
+  return "other";
+}
+
+function calculateWorkspaceProgress(workspace: InterviewWorkspace) {
+  if (workspace.items.length === 0) return 0;
+  const score = workspace.items.reduce((total, item) => {
+    if (item.completed || item.status === "completed") return total + 1;
+    if (item.status === "in_progress") return total + 0.45;
+    return total;
+  }, 0);
+  return Math.round((score / workspace.items.length) * 100);
+}
+
+function calculateTypeProgress(workspace: InterviewWorkspace, type: PrepItemType) {
+  const items = workspace.items.filter((item) => item.type === type);
+  if (items.length === 0) return 0;
+  return Math.round((items.filter((item) => item.completed || item.status === "completed").length / items.length) * 100);
+}
+
+function isPrepEvent(event: CalendarEvent) {
+  return event.eventType === "written" || event.eventType === "interview" || /笔试|面试|测评/.test(event.title);
+}
+
+function findNextPrepEvent(application: ApplicationRecord, events: CalendarEvent[], todayKey: string) {
+  const company = application.company.toLowerCase();
+  const role = application.role.toLowerCase();
+  return sortCalendarEvents(
+    events.filter((event) => {
+      const text = `${event.title} ${event.description || ""}`.toLowerCase();
+      return event.date >= todayKey && isPrepEvent(event) && (text.includes(company) || (role && text.includes(role)));
+    }),
+  )[0];
+}
+
+function prepPriorityScore(application: ApplicationRecord, workspace: InterviewWorkspace, nextEvent: CalendarEvent | undefined, todayKey: string) {
+  const progress = calculateWorkspaceProgress(workspace);
+  const dayMs = 24 * 60 * 60 * 1000;
+  const days = nextEvent
+    ? Math.max(0, Math.round((new Date(`${nextEvent.date}T00:00:00`).getTime() - new Date(`${todayKey}T00:00:00`).getTime()) / dayMs))
+    : 99;
+  const urgency = days <= 2 ? 48 : days <= 7 ? 30 : days <= 14 ? 14 : 0;
+  const intent = application.priority === "P0" ? 24 : application.priority === "P1" ? 16 : 8;
+  return urgency + intent + Math.max(0, 32 - progress / 3);
+}
+
+function addDays(dateKey: string, days: number) {
+  const date = new Date(`${dateKey}T00:00:00`);
+  date.setDate(date.getDate() + days);
+  return toDateKey(date);
+}
+
+function reorderByIds<T extends { id: string }>(items: T[], sourceId: string, targetId: string) {
+  const sourceIndex = items.findIndex((item) => item.id === sourceId);
+  const targetIndex = items.findIndex((item) => item.id === targetId);
+  if (sourceIndex < 0 || targetIndex < 0) return items;
+  const next = items.slice();
+  const [source] = next.splice(sourceIndex, 1);
+  next.splice(targetIndex, 0, source);
+  return next;
+}
+
+function formatClock(iso: string) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+const jobImportFieldConfig = [
+  { key: "company", label: "企业名称", required: true, aliases: ["公司", "企业名称", "公司名称", "单位", "招聘单位"] },
+  { key: "companyType", label: "企业类型", aliases: ["企业类型", "公司类型", "企业性质", "单位性质"] },
+  { key: "industry", label: "所属行业", aliases: ["行业类别", "所属行业", "行业", "公司行业", "领域"] },
+  { key: "updatedAt", label: "更新日期", aliases: ["更新时间", "更新日期", "最近进度日期"] },
+  { key: "batch", label: "招聘类型", aliases: ["批次（暑期实习）", "批次暑期实习", "招聘类型", "批次", "岗位类型"] },
+  { key: "recruitTarget", label: "招聘届次", aliases: ["招聘届次", "届次要求", "面向届次", "年级"] },
+  { key: "city", label: "工作城市", aliases: ["工作地点", "工作城市", "城市", "base地", "base", "工作地"] },
+  { key: "title", label: "岗位列表", required: true, aliases: ["招聘岗位", "岗位列表", "岗位", "职位", "职位名称", "岗位名称"] },
+  { key: "startDate", label: "开始日期", aliases: ["开始时间", "开始日期", "开放时间"] },
+  { key: "deadline", label: "截止日期", aliases: ["截止时间", "截止日期", "网申截止", "招聘截止时间", "deadline"] },
+  { key: "applyUrl", label: "投递地址", aliases: ["简历投递链接", "投递地址", "投递链接", "网申链接", "申请链接"] },
+  { key: "announcementUrl", label: "公告地址", aliases: ["公告链接", "公告地址", "原文链接"] },
+  { key: "examRequired", label: "是否笔试", aliases: ["是否笔试", "是否笔试1", "笔试", "测评"] },
+  { key: "source", label: "公告来源", aliases: ["公告来源", "信息来源", "来源"] },
+  { key: "description", label: "备注", aliases: ["备注", "补充说明", "信息备注"] },
+  { key: "majorRequirement", label: "专业要求", aliases: ["专业要求", "专业", "适配专业"] },
+  { key: "education", label: "学历要求", aliases: ["学历要求", "学历"] },
+] as const;
+
+type JobImportFieldKey = (typeof jobImportFieldConfig)[number]["key"];
+type JobImportMapping = Record<JobImportFieldKey, number>;
+type SpreadsheetCell = string | number | boolean | Date | null | undefined;
+
+function normalizeJob(job: Partial<Job>, index = 0): Job {
+  const timestamp = new Date().toISOString().slice(0, 10);
+  const company = cleanImportText(job.company) || "未命名公司";
+  const title = cleanImportText(job.title) || "未命名岗位";
+  const batch = job.batch === "实习" ? "实习" : "校招";
+  return {
+    id: job.id || `job-${normalizeDuplicateText(company)}-${normalizeDuplicateText(title)}-${index}-${Date.now()}`,
+    company,
+    title,
+    industry: cleanImportText(job.industry) || "待确认",
+    city: cleanImportText(job.city) || "待确认",
+    deadline: cleanImportText(job.deadline) || "待确认",
+    applyUrl: cleanImportText(job.applyUrl) || cleanImportText(job.announcementUrl),
+    batch,
+    companyType: cleanImportText(job.companyType) || "待确认",
+    education: cleanImportText(job.education) || cleanImportText(job.recruitTarget) || "本科及以上",
+    status: job.status || "待投递",
+    tags: Array.from(new Set((job.tags || []).map(cleanImportText).filter(Boolean))).slice(0, 10),
+    updatedAt: cleanImportText(job.updatedAt) || timestamp,
+    description: cleanImportText(job.description),
+    announcementUrl: cleanImportText(job.announcementUrl),
+    examRequired: cleanImportText(job.examRequired),
+    majorRequirement: cleanImportText(job.majorRequirement),
+    recruitTarget: cleanImportText(job.recruitTarget),
+    source: cleanImportText(job.source),
+    startDate: cleanImportText(job.startDate),
+  };
+}
+
+function countDuplicateJobs(jobs: Job[]) {
+  const seen = new Set<string>();
+  return jobs.reduce((count, job) => {
+    const key = getJobDuplicateKey(job);
+    if (seen.has(key)) return count + 1;
+    seen.add(key);
+    return count;
+  }, 0);
+}
+
+function getJobDuplicateKey(job: Pick<Job, "company" | "title" | "applyUrl" | "city" | "deadline">) {
+  const company = normalizeDuplicateText(job.company);
+  const title = normalizeDuplicateText(job.title);
+  const applyUrl = normalizeDuplicateUrl(job.applyUrl);
+  if (applyUrl) return `${company}|${title}|${applyUrl}`;
+  return `${company}|${title}|${normalizeDuplicateText(job.city)}|${normalizeDuplicateText(job.deadline)}`;
+}
+
+async function parseJobImportFile(file: File, existingJobs: Job[]): Promise<JobImportPreview> {
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, {
+    type: "array",
+    cellDates: true,
+    raw: false,
+  });
+  const sheetName = workbook.SheetNames[0];
+  if (!sheetName) throw new Error("没有读取到工作表，请确认文件内容。");
+
+  const sheet = workbook.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json<SpreadsheetCell[]>(sheet, { header: 1, defval: "", blankrows: false });
+  const headerRowIndex = findHeaderRowIndex(rows);
+  if (headerRowIndex < 0) throw new Error("没有识别到有效表头，请确认表格包含公司、岗位等字段。");
+
+  const headers = rows[headerRowIndex].map((cell) => cleanImportText(spreadsheetValueToText(cell)));
+  const mapping = buildImportMapping(headers);
+  const fieldMatches = jobImportFieldConfig.map((field) => {
+    const columnIndex = mapping[field.key];
+    const sample = rows
+      .slice(headerRowIndex + 1, headerRowIndex + 10)
+      .map((row) => cleanImportText(spreadsheetValueToText(row[columnIndex])))
+      .find(Boolean) || "";
+    const isRequired = "required" in field && field.required;
+    return {
+      label: field.label,
+      matchedHeader: columnIndex >= 0 ? headers[columnIndex] : "",
+      required: Boolean(isRequired),
+      sample,
+    };
+  });
+
+  const missingRequired = fieldMatches.filter((field) => field.required && !field.matchedHeader);
+  if (missingRequired.length > 0) {
+    throw new Error(`缺少必填字段：${missingRequired.map((field) => field.label).join("、")}。`);
+  }
+
+  const existingKeys = new Set(existingJobs.map(getJobDuplicateKey));
+  const fileKeys = new Set<string>();
+  const uniqueJobs: Job[] = [];
+  const duplicates: Job[] = [];
+  const errors: string[] = [];
+  const dataRows = rows.slice(headerRowIndex + 1);
+  let skippedRows = 0;
+
+  dataRows.forEach((row, index) => {
+    const rowHasValue = row.some((cell) => cleanImportText(spreadsheetValueToText(cell)));
+    const job = buildImportedJob(row, mapping, index);
+    if (!job) {
+      if (rowHasValue) {
+        skippedRows += 1;
+      }
+      return;
+    }
+
+    if (!isTarget2027AutumnRecruitment(job)) {
+      skippedRows += 1;
+      return;
+    }
+
+    if (!job.company || !job.title) {
+      if (rowHasValue) {
+        errors.push(`第 ${headerRowIndex + index + 2} 行缺少企业名称或岗位，已跳过。`);
+      }
+      return;
+    }
+
+    const key = getJobDuplicateKey(job);
+    if (existingKeys.has(key) || fileKeys.has(key)) {
+      duplicates.push(job);
+      return;
+    }
+
+    fileKeys.add(key);
+    uniqueJobs.push(job);
+  });
+
+  return {
+    duplicates,
+    errors,
+    fileName: file.name,
+    fieldMatches,
+    importedAt: new Date().toISOString(),
+    rows: dataRows.length,
+    skippedRows,
+    uniqueJobs,
+  };
+}
+
+function findHeaderRowIndex(rows: SpreadsheetCell[][]) {
+  let bestIndex = -1;
+  let bestScore = 0;
+  rows.slice(0, 12).forEach((row, index) => {
+    const normalizedHeaders = row.map((cell) => normalizeImportHeader(spreadsheetValueToText(cell)));
+    const score = jobImportFieldConfig.reduce((total, field) => {
+      return total + (field.aliases.some((alias) => normalizedHeaders.includes(normalizeImportHeader(alias))) ? 1 : 0);
+    }, 0);
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = index;
+    }
+  });
+  return bestScore >= 2 ? bestIndex : -1;
+}
+
+function buildImportMapping(headers: string[]): JobImportMapping {
+  const normalizedHeaders = headers.map(normalizeImportHeader);
+  return jobImportFieldConfig.reduce((mapping, field) => {
+    const index = field.aliases.findIndex((alias) => normalizedHeaders.includes(normalizeImportHeader(alias)));
+    const headerIndex = index >= 0 ? normalizedHeaders.indexOf(normalizeImportHeader(field.aliases[index])) : -1;
+    return { ...mapping, [field.key]: headerIndex };
+  }, {} as JobImportMapping);
+}
+
+function buildImportedJob(row: SpreadsheetCell[], mapping: JobImportMapping, index: number): Job | null {
+  const read = (key: JobImportFieldKey) => {
+    const columnIndex = mapping[key];
+    return columnIndex >= 0 ? cleanImportText(spreadsheetValueToText(row[columnIndex])) : "";
+  };
+
+  const company = read("company");
+  const title = read("title");
+  if (!company || !title || isInstructionImportRow(company, title)) return null;
+
+  const startDate = normalizeSpreadsheetDate(read("startDate"));
+  const deadline = normalizeSpreadsheetDate(read("deadline")) || read("deadline") || "招满为止";
+  const updatedAt = normalizeSpreadsheetDate(read("updatedAt")) || read("updatedAt") || new Date().toISOString().slice(0, 10);
+  const applyUrl = read("applyUrl");
+  const announcementUrl = read("announcementUrl");
+  const industry = read("industry");
+  const companyType = read("companyType");
+  const recruitTarget = read("recruitTarget");
+  const majorRequirement = read("majorRequirement");
+  const examRequired = read("examRequired");
+  const source = read("source");
+  const description = [read("description"), majorRequirement && `专业要求：${majorRequirement}`, source && `公告来源：${source}`, examRequired && `是否笔试：${examRequired}`]
+    .filter(Boolean)
+    .join("；");
+  const batch = normalizeImportBatch(read("batch") || recruitTarget);
+  const idBase = [company, title, read("city"), applyUrl || announcementUrl || deadline].map(normalizeDuplicateText).filter(Boolean).join("-");
+
+  return normalizeJob(
+    {
+      id: `import-${idBase || index}`,
+      company,
+      title,
+      industry,
+      city: read("city"),
+      deadline,
+      applyUrl: applyUrl || announcementUrl,
+      announcementUrl,
+      batch,
+      companyType,
+      education: read("education") || recruitTarget,
+      status: "待投递",
+      tags: splitImportTags(companyType, industry, batch, recruitTarget, examRequired, majorRequirement),
+      updatedAt,
+      description,
+      examRequired,
+      majorRequirement,
+      recruitTarget,
+      source,
+      startDate,
+    },
+    index,
+  );
+}
+
+function isInstructionImportRow(company: string, title: string) {
+  const text = `${company} ${title}`;
+  return /使用说明|获取校招|补充表格|飞书云文档|复制|教程|免责声明/.test(text);
+}
+
+function normalizeImportBatch(value: string): Job["batch"] {
+  if (/实习|提前批|暑期/.test(value)) return "实习";
+  return "校招";
+}
+
+function isTarget2027AutumnRecruitment(job: Job) {
+  const text = [
+    job.company,
+    job.title,
+    job.batch,
+    job.education,
+    job.recruitTarget,
+    job.description,
+    job.tags.join(" "),
+  ].join(" ");
+  const is2027 = /2027|27届|二七届|廿七届/.test(text);
+  const isSpring = /春招|2026届|26届/.test(text) && !/2027|27届/.test(text);
+  const isTargetBatch = /暑期|实习|秋招|校招|提前批|正式批|补录|应届/.test(text);
+  return is2027 && isTargetBatch && !isSpring;
+}
+
+function sortJobs(jobs: Job[], sort: string) {
+  const sorted = jobs.slice();
+  if (sort === "companyTypeThenUpdate") {
+    return sorted.sort((a, b) => {
+      const typeCompare = a.companyType.localeCompare(b.companyType, "zh-Hans-CN");
+      if (typeCompare !== 0) return typeCompare;
+      return compareJobDateDesc(a.updatedAt, b.updatedAt);
+    });
+  }
+  if (sort === "deadlineAsc") {
+    return sorted.sort((a, b) => compareJobDateAsc(a.deadline, b.deadline));
+  }
+  return sorted.sort((a, b) => compareJobDateDesc(a.updatedAt, b.updatedAt));
+}
+
+function compareJobDateDesc(a: string, b: string) {
+  return jobDateSortValue(b) - jobDateSortValue(a);
+}
+
+function compareJobDateAsc(a: string, b: string) {
+  return jobDateSortValue(a, Number.MAX_SAFE_INTEGER) - jobDateSortValue(b, Number.MAX_SAFE_INTEGER);
+}
+
+function jobDateSortValue(value: string, fallback = 0) {
+  const normalized = normalizeSpreadsheetDate(value);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return fallback;
+  return new Date(`${normalized}T00:00:00`).getTime();
+}
+
+function applicationDraftFromJob(job: Job): ApplicationRecord {
+  const deadline = normalizeSpreadsheetDate(job.deadline);
+  const city = cleanImportText(job.city);
+  const tags = job.tags.filter((tag) => !["校招", "实习", "2027届", "官网巡检"].includes(tag));
+  const examRequired = cleanImportText(job.examRequired);
+  const majorRequirement = cleanImportText(job.majorRequirement);
+  const notes = [
+    job.description,
+    job.companyType && `企业类型：${job.companyType}`,
+    majorRequirement && `专业要求：${majorRequirement}`,
+    examRequired && `是否笔试：${examRequired}`,
+    job.startDate && `开始时间：${job.startDate}`,
+    job.deadline && `截止时间：${job.deadline}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return {
+    ...blankApplication,
+    id: "",
+    company: job.company,
+    role: job.title,
+    direction: tags[0] || inferRoleCategoryFromJob(job),
+    companyType: normalizeApplicationCompanyType(job.companyType),
+    industry: job.industry,
+    location: city,
+    recruitType: normalizeApplicationRecruitType(job),
+    channel: job.applyUrl ? "官网" : job.source || "信息源",
+    applyDate: "",
+    status: "准备投递",
+    progress: "已从信息源加入流程，待补充投递信息",
+    nextAction: "完善投递信息并提交申请",
+    nextDeadline: /^\d{4}-\d{2}-\d{2}$/.test(deadline) ? `${deadline}T23:59` : "",
+    needsFollowUp: "是",
+    baseCity: city.split(/[、,，/]/)[0] || "",
+    source: job.source || "求职信息源导入",
+    sourceJobId: job.id,
+    applyUrl: job.applyUrl || job.announcementUrl || "",
+    jd: job.description,
+    assessment: examRequired.includes("测评") ? "进行中" : "未开始",
+    writtenTest: /是|笔试|测评/.test(examRequired) ? "未开始" : "未开始",
+    notes,
+  };
+}
+
+function normalizeApplicationCompanyType(companyType: string) {
+  if (/央|国企|事业/.test(companyType)) return "央国企";
+  if (/外企|跨国/.test(companyType)) return "外企";
+  if (/高校|科研/.test(companyType)) return "高校/科研";
+  if (/民营|私企|互联网/.test(companyType)) return "民营企业";
+  return companyType || "其他";
+}
+
+function normalizeApplicationRecruitType(job: Job) {
+  const text = [job.batch, job.recruitTarget, job.education, job.tags.join(" "), job.title].join(" ");
+  if (/暑期/.test(text)) return "暑期实习";
+  if (/实习|提前批/.test(text)) return "实习提前批";
+  if (/补录/.test(text)) return "补录";
+  return "2027届秋招";
+}
+
+function inferRoleCategoryFromJob(job: Job) {
+  const text = [job.title, job.industry, job.tags.join(" ")].join(" ");
+  if (/产品|PM|Product/i.test(text)) return "产品/项目";
+  if (/算法|开发|工程师|后端|前端|测试|软件|硬件|芯片|Java|Python|C\+\+|Go/.test(text)) return "技术研发";
+  if (/运营|增长|内容|用户/.test(text)) return "运营";
+  if (/市场|品牌|商务|销售/.test(text)) return "市场/商业";
+  if (/管培|综合|职能|人力|财务|行政/.test(text)) return "综合管理";
+  return job.industry || "待确认";
+}
+
+function splitImportTags(...values: string[]) {
+  return Array.from(
+    new Set(
+      values
+        .join(" / ")
+        .split(/[、,，/|；;\s]+/)
+        .map(cleanImportText)
+        .filter((item) => item && item.length <= 16),
+    ),
+  ).slice(0, 8);
+}
+
+function spreadsheetValueToText(value: SpreadsheetCell) {
+  if (value === null || value === undefined) return "";
+  if (value instanceof Date) return toDateKey(value);
+  return String(value).replace(/\r?\n/g, " ").trim();
+}
+
+function normalizeSpreadsheetDate(value: SpreadsheetCell) {
+  if (value === null || value === undefined || value === "") return "";
+  if (value instanceof Date) return toDateKey(value);
+  if (typeof value === "number" && value > 30000 && value < 70000) {
+    const parsed = XLSX.SSF.parse_date_code(value);
+    if (parsed) {
+      return `${parsed.y}-${String(parsed.m).padStart(2, "0")}-${String(parsed.d).padStart(2, "0")}`;
+    }
+  }
+
+  const text = cleanImportText(spreadsheetValueToText(value));
+  const dateMatch = text.match(/(20\d{2})[./年-]\s*(\d{1,2})[./月-]\s*(\d{1,2})/);
+  if (dateMatch) {
+    return `${dateMatch[1]}-${dateMatch[2].padStart(2, "0")}-${dateMatch[3].padStart(2, "0")}`;
+  }
+  const shortMatch = text.match(/(\d{1,2})[./月-]\s*(\d{1,2})/);
+  if (shortMatch) {
+    return `2026-${shortMatch[1].padStart(2, "0")}-${shortMatch[2].padStart(2, "0")}`;
+  }
+  if (/招满|尽快|待定|长期|不限|滚动/.test(text)) return text;
+  return text;
+}
+
+function cleanImportText(value: SpreadsheetCell) {
+  return spreadsheetValueToText(value)
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeImportHeader(value: string) {
+  return cleanImportText(value)
+    .replace(/\(\d+\)$/g, "")
+    .replace(/[（）()[\]\s:_：-]/g, "")
+    .toLowerCase();
+}
+
+function normalizeDuplicateText(value: string) {
+  return cleanImportText(value)
+    .replace(/^https?:\/\//i, "")
+    .replace(/\/$/g, "")
+    .replace(/[（）()[\]\s:_：\-—/|、,，.。]/g, "")
+    .toLowerCase();
+}
+
+function normalizeDuplicateUrl(value: string) {
+  return cleanImportText(value)
+    .replace(/^https?:\/\//i, "")
+    .replace(/[?#].*$/g, "")
+    .replace(/\/$/g, "")
+    .toLowerCase();
+}
+
 function distanceLabel(due: string, today: string) {
   const dayMs = 24 * 60 * 60 * 1000;
   const diff = Math.round((new Date(`${due}T00:00:00`).getTime() - new Date(`${today}T00:00:00`).getTime()) / dayMs);
@@ -3514,17 +5314,141 @@ function Metric({ label, value }: { label: string; value: number }) {
   );
 }
 
+function JobImportPanel({
+  existingJobs,
+  onDedupeExisting,
+  onImport,
+}: {
+  existingJobs: Job[];
+  onDedupeExisting: () => void;
+  onImport: (preview: JobImportPreview) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = useState<JobImportPreview | null>(null);
+  const [message, setMessage] = useState("");
+  const [isParsing, setIsParsing] = useState(false);
+  const currentDuplicateCount = useMemo(() => countDuplicateJobs(existingJobs), [existingJobs]);
+
+  async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (!file) return;
+
+    setIsParsing(true);
+    setMessage("");
+    try {
+      const nextPreview = await parseJobImportFile(file, existingJobs);
+      setPreview(nextPreview);
+      setMessage(
+        `已读取 ${nextPreview.rows} 行，按 2027 届暑期实习 / 秋招筛选后可新增 ${nextPreview.uniqueJobs.length} 条，重复 ${nextPreview.duplicates.length} 条，跳过非目标记录 ${nextPreview.skippedRows} 条。`,
+      );
+    } catch (error) {
+      setPreview(null);
+      setMessage(error instanceof Error ? error.message : "文件解析失败，请检查表头和文件格式。");
+    } finally {
+      setIsParsing(false);
+    }
+  }
+
+  function confirmImport() {
+    if (!preview) return;
+    onImport(preview);
+    setMessage(`导入完成：新增 ${preview.uniqueJobs.length} 条，跳过重复 ${preview.duplicates.length} 条。`);
+    setPreview(null);
+  }
+
+  return (
+    <section className="job-import-panel">
+      <div className="job-import-main">
+        <div>
+          <span>Import center</span>
+          <h3>导入 CSV / Excel 岗位表</h3>
+          <p>按 27 届汇总表字段自动识别：公司、企业类型、行业、批次、城市、岗位、时间、投递链接、公告来源等。</p>
+        </div>
+        <div className="job-import-actions">
+          <input
+            accept=".csv,.xls,.xlsx"
+            aria-label="导入岗位表格"
+            hidden
+            ref={inputRef}
+            type="file"
+            onChange={handleFileChange}
+          />
+          <button className="job-import-primary" onClick={() => inputRef.current?.click()} type="button">
+            <Upload aria-hidden="true" />
+            {isParsing ? "识别中" : "导入表格"}
+          </button>
+          <button disabled={currentDuplicateCount === 0} onClick={onDedupeExisting} type="button">
+            清理当前重复 {currentDuplicateCount > 0 ? currentDuplicateCount : ""}
+          </button>
+        </div>
+      </div>
+
+      {message && <p className="job-import-message">{message}</p>}
+
+      {preview && (
+        <div className="job-import-preview">
+          <div className="job-import-stats">
+            <span><strong>{preview.rows}</strong>读取行数</span>
+            <span><strong>{preview.uniqueJobs.length}</strong>可新增</span>
+            <span><strong>{preview.duplicates.length}</strong>重复跳过</span>
+            <span><strong>{preview.skippedRows}</strong>非 2027 跳过</span>
+          </div>
+
+          <div className="job-field-map">
+            {preview.fieldMatches.map((field) => (
+              <article className={field.required && !field.matchedHeader ? "is-missing" : ""} key={field.label}>
+                <small>{field.required ? "必填字段" : "识别字段"}</small>
+                <strong>{field.label}</strong>
+                <span>{field.matchedHeader || "未识别"}</span>
+                {field.sample && <em>{field.sample}</em>}
+              </article>
+            ))}
+          </div>
+
+          {preview.uniqueJobs.length > 0 && (
+            <div className="job-import-sample">
+              <strong>新增预览</strong>
+              {preview.uniqueJobs.slice(0, 5).map((job) => (
+                <span key={job.id}>{job.company} / {job.title} / {job.city || "地点待确认"}</span>
+              ))}
+            </div>
+          )}
+
+          {preview.errors.length > 0 && (
+            <div className="job-import-errors">
+              <strong>异常行</strong>
+              {preview.errors.slice(0, 4).map((error) => <span key={error}>{error}</span>)}
+            </div>
+          )}
+
+          <div className="job-import-confirm">
+            <button onClick={() => setPreview(null)} type="button">取消</button>
+            <button disabled={preview.uniqueJobs.length === 0} onClick={confirmImport} type="button">
+              确认导入新增岗位
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function JobsTable({
   jobs,
   onEditJob,
   onKeepJobs,
+  onMarkJobsUnsuitable,
   onRemoveJobs,
+  onStartApplication,
   onStatusChange,
 }: {
   jobs: Job[];
   onEditJob: (jobId: string) => void;
   onKeepJobs: (jobIds: string[]) => void;
+  onMarkJobsUnsuitable: (jobIds: string[]) => void;
   onRemoveJobs: (jobIds: string[]) => void;
+  onStartApplication: (jobId: string) => void;
   onStatusChange: (jobId: string, status: JobStatus) => void;
 }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -3547,6 +5471,16 @@ function JobsTable({
     setSelectedIds([]);
   }
 
+  function markSelectedUnsuitable() {
+    onMarkJobsUnsuitable(visibleSelectedIds);
+    setSelectedIds([]);
+  }
+
+  function restoreSelectedJobs() {
+    visibleSelectedIds.forEach((id) => onStatusChange(id, "待投递"));
+    setSelectedIds([]);
+  }
+
   function confirmDeleteJobs() {
     if (!deleteJobIds?.length) return;
     onRemoveJobs(deleteJobIds);
@@ -3565,6 +5499,8 @@ function JobsTable({
           <strong>已选择 {selectedCount} 项</strong>
           <div>
             <button onClick={keepSelectedJobs} type="button">保留</button>
+            <button onClick={markSelectedUnsuitable} type="button">标为不合适</button>
+            <button onClick={restoreSelectedJobs} type="button">恢复到原列表</button>
             <button className="danger-button" onClick={() => setDeleteJobIds(visibleSelectedIds)} type="button">删除</button>
             <button onClick={() => setSelectedIds([])} type="button">取消选择</button>
           </div>
@@ -3583,7 +5519,14 @@ function JobsTable({
                 />
               </th>
               <th>公司与岗位</th>
-              <th>操作</th>
+              <th>状态</th>
+              <th>企业类型 / 行业</th>
+              <th>官网链接</th>
+              <th>投递</th>
+              <th>兴趣库</th>
+              <th>适配</th>
+              <th>编辑</th>
+              <th>删除</th>
               <th>招聘截止时间</th>
               <th>更新时间</th>
               <th>工作地点</th>
@@ -3611,16 +5554,48 @@ function JobsTable({
                   </div>
                 </td>
                 <td>
-                  <div className="row-actions">
-                    {job.applyUrl ? <a href={job.applyUrl} rel="noreferrer" target="_blank">查看官网链接</a> : <span>暂无链接</span>}
-                    <button onClick={() => onStatusChange(job.id, "已投递")} type="button">加入投递流程</button>
-                    <button onClick={() => onStatusChange(job.id, "收藏中")} type="button">加入兴趣库</button>
-                    <button onClick={() => onEditJob(job.id)} type="button">编辑</button>
-                    <button className="danger-link" onClick={() => setDeleteJobIds([job.id])} type="button">删除</button>
+                  <span className={`job-status-pill job-status-pill--${job.status}`}>{job.status}</span>
+                </td>
+                <td>
+                  <div className="job-kind-cell">
+                    <strong>{job.companyType || "待确认"}</strong>
+                    <span>{job.industry || "行业待确认"}</span>
                   </div>
                 </td>
-                <td className={job.deadline.includes("截止") || job.deadline.includes("招满") ? "deadline" : ""}>{job.deadline}</td>
-                <td>{job.updatedAt}</td>
+                <td>
+                  {job.applyUrl ? (
+                    <a className="job-table-action" href={job.applyUrl} rel="noreferrer" target="_blank">打开</a>
+                  ) : (
+                    <span className="job-table-muted">暂无</span>
+                  )}
+                </td>
+                <td>
+                  <button className="job-table-action" onClick={() => onStartApplication(job.id)} type="button">加入流程</button>
+                </td>
+                <td>
+                  <button className="job-table-action" onClick={() => onStatusChange(job.id, "收藏中")} type="button">收藏</button>
+                </td>
+                <td>
+                  {job.status === "不合适" ? (
+                    <button className="job-table-action job-table-action--restore" onClick={() => onStatusChange(job.id, "待投递")} type="button">
+                      恢复到原列表
+                    </button>
+                  ) : (
+                    <button className="job-table-action job-table-action--quiet" onClick={() => onStatusChange(job.id, "不合适")} type="button">
+                      不合适
+                    </button>
+                  )}
+                </td>
+                <td>
+                  <button className="job-table-action" onClick={() => onEditJob(job.id)} type="button">编辑</button>
+                </td>
+                <td>
+                  <button className="job-table-action job-table-action--danger" onClick={() => setDeleteJobIds([job.id])} type="button">删除</button>
+                </td>
+                <td className={job.deadline.includes("截止") || job.deadline.includes("招满") ? "deadline table-nowrap" : "table-nowrap"}>
+                  {job.deadline}
+                </td>
+                <td className="table-nowrap">{job.updatedAt}</td>
                 <td>
                   <div className="cities">
                     {job.city.split(/[、,，/]/).slice(0, 5).map((item) => <span key={item}>{item}</span>)}
@@ -3975,6 +5950,7 @@ const applicationFieldLabels: Record<keyof ApplicationRecord, string> = {
   priority: "优先级",
   interest: "意向程度",
   source: "信息来源",
+  sourceJobId: "来源岗位",
   applyUrl: "网申链接",
   jd: "JD",
   resumeVersion: "简历版本",
