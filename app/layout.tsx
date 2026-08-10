@@ -14,11 +14,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "offercat",
-  description: "秋招信息与投递进程工作台，帮你把分散的校招数据整理成自己的岗位库。",
+  title: "曾依 Zoe Zeng｜增长内容策略与 AI 工作流作品集",
+  description: "曾依的个人作品集，展示海外 SEO 内容增长、AI 工作流、Offer Cat 求职管理工作台、AI 译文质量评估与项目运营经历。",
   openGraph: {
-    title: "offercat",
-    description: "把分散的校招信息，变成你的可投递岗位库。",
+    title: "Zoe Zeng Portfolio",
+    description: "Content strategy, AI workflow, product operations, and research-driven project work.",
     type: "website",
   },
   icons: {
