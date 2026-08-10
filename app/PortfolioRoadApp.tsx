@@ -358,7 +358,12 @@ export default function PortfolioRoadApp() {
                   </div>
                 ) : null}
                 {slide.projectUrl ? (
-                  <a className="project-live-link" href={slide.projectUrl} target="_blank" rel="noreferrer">
+                  <a
+                    className="project-live-link"
+                    href={slide.projectUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
                     查看线上项目
                   </a>
                 ) : null}
