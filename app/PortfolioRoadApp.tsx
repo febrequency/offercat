@@ -11,6 +11,7 @@ type Slide = {
   subtitle: string;
   body: string;
   image?: string;
+  projectUrl?: string;
   stats: Array<{ value: string; label: string }>;
   notes: string[];
   modules?: Array<{
@@ -63,6 +64,7 @@ const projectSlides: Slide[] = [
     subtitle: "把求职流程从表格碎片变成系统",
     body: "从真实秋招痛点出发，设计并上线个人求职管理工具，整合岗位信息源、投递跟进、日历、待办和笔面试准备。",
     image: "/assets/portfolio/offercat-dashboard.png",
+    projectUrl: "https://offercat.ceciliacruon.workers.dev/",
     stats: [
       { value: "5", label: "核心页面上线" },
       { value: "3", label: "自测迭代轮次" },
@@ -186,7 +188,6 @@ const educationItems = [
 export default function PortfolioRoadApp() {
   const slides = useMemo(() => ["home", ...projectSlides.map((slide) => slide.id)], []);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [activeDetail, setActiveDetail] = useState<Slide | null>(null);
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
   const lastWheelAt = useRef(0);
 
@@ -204,7 +205,6 @@ export default function PortfolioRoadApp() {
     };
   });
   const activeRoadStop = activeIndex > 0 ? roadStops[activeIndex] : null;
-  const activeRoadProject = activeIndex > 0 ? projectSlides[activeIndex - 1] : null;
   const activeRoadStopStyle = {
     "--stop-left": activeIndex === 1 ? "52%" : activeIndex === 2 ? "68%" : activeIndex === 3 ? "78%" : "30%",
     "--sign-bottom": activeIndex === 1 ? "150px" : activeIndex === 2 || activeIndex === 3 ? "98px" : "188px",
@@ -357,6 +357,11 @@ export default function PortfolioRoadApp() {
                     ))}
                   </div>
                 ) : null}
+                {slide.projectUrl ? (
+                  <a className="project-live-link" href={slide.projectUrl} target="_blank" rel="noreferrer">
+                    打开项目
+                  </a>
+                ) : null}
               </div>
 
               <div className="project-visual">
@@ -421,20 +426,7 @@ export default function PortfolioRoadApp() {
 
       <div className="bottom-road">
         <div className="road-side-signs">
-          {activeRoadStop && activeRoadProject && activeRoadProject.id !== "lark" ? (
-            <button
-              type="button"
-              className={`reference-road-sign ${activeRoadStop.position} current is-clickable`}
-              style={activeRoadStopStyle}
-              onClick={() => setActiveDetail(activeRoadProject)}
-              aria-label={`打开 ${activeRoadProject.title} 项目详情`}
-            >
-              <span>{activeRoadStop.index}</span>
-              <small>{activeRoadStop.time}</small>
-              <strong>{activeRoadStop.title}</strong>
-              <em>点击查看详细项目页面</em>
-            </button>
-          ) : activeRoadStop ? (
+          {activeRoadStop ? (
             <div
               className={`reference-road-sign ${activeRoadStop.position} current`}
               style={activeRoadStopStyle}
@@ -486,61 +478,6 @@ export default function PortfolioRoadApp() {
         </button>
       </div>
 
-      {activeDetail && (
-        <div className="detail-page-shell" role="dialog" aria-modal="true" aria-labelledby="detail-title">
-          <button className="detail-backdrop" type="button" aria-label="关闭项目详情" onClick={() => setActiveDetail(null)} />
-          <section className="detail-page">
-            <button className="detail-close" type="button" onClick={() => setActiveDetail(null)}>
-              关闭
-            </button>
-            <div className="detail-header">
-              <p className="portfolio-kicker">{activeDetail.eyebrow}</p>
-              <h2 id="detail-title">{activeDetail.title}</h2>
-              <p>{activeDetail.body}</p>
-            </div>
-            <div className="detail-grid">
-              <div className="detail-image-main">
-                {activeDetail.image ? (
-                  <img
-                    src={activeDetail.image}
-                    alt={`${activeDetail.title} 主图`}
-                    width={980}
-                    height={560}
-                    sizes="(max-width: 900px) 100vw, 55vw"
-                  />
-                ) : (
-                  <span>配图位置 01</span>
-                )}
-              </div>
-              <div className="detail-copy-block">
-                <h3>项目背景</h3>
-                <p>{activeDetail.subtitle}</p>
-                <p>这里后续可以补充项目起点、目标用户、核心问题和你在项目中的具体角色。</p>
-              </div>
-              <div className="detail-copy-block">
-                <h3>过程方法</h3>
-                <p>这里预留给流程拆解、关键判断、工具使用、协作方式和迭代记录。</p>
-              </div>
-              <div className="detail-mini-gallery">
-                <span>配图位置 02</span>
-                <span>配图位置 03</span>
-                <span>配图位置 04</span>
-              </div>
-              <div className="detail-copy-block wide">
-                <h3>结果证据</h3>
-                <div className="stats-strip">
-                  {activeDetail.stats.map((stat) => (
-                    <div key={stat.label}>
-                      <strong>{stat.value}</strong>
-                      <span>{stat.label}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </section>
-        </div>
-      )}
     </main>
   );
 }

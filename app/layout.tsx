@@ -3,10 +3,10 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "曾依 Zoe Zeng｜增长内容策略与 AI 工作流作品集",
+  title: "Zoe's Portfolio｜曾依 Zoe Zeng",
   description: "曾依的个人作品集，展示海外 SEO 内容增长、AI 工作流、Offer Cat 求职管理工作台、AI 译文质量评估与项目运营经历。",
   openGraph: {
-    title: "Zoe Zeng Portfolio",
+    title: "Zoe's Portfolio",
     description: "Content strategy, AI workflow, product operations, and research-driven project work.",
     type: "website",
   },
