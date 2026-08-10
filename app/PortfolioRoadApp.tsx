@@ -206,7 +206,7 @@ export default function PortfolioRoadApp() {
   });
   const activeRoadStop = activeIndex > 0 ? roadStops[activeIndex] : null;
   const activeRoadStopStyle = {
-    "--stop-left": activeIndex === 1 ? "52%" : activeIndex === 2 ? "68%" : activeIndex === 3 ? "78%" : "30%",
+    "--stop-left": activeIndex === 1 ? "66%" : activeIndex === 2 ? "82%" : activeIndex === 3 ? "86%" : "30%",
     "--sign-bottom": activeIndex === 1 ? "150px" : activeIndex === 2 || activeIndex === 3 ? "98px" : "188px",
   } as RoadStopStyle;
 
